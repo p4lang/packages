@@ -37,6 +37,10 @@ build-pkg +args:
 upload-src-pkg package: (generate-src-pkg package)
     ./scripts/upload-src-pkg {{obs_project}} p4lang-{{package}} build/{{package}}
 
+# Upload every level of the pi/bmv2/p4c stack that can move without skipping a level.
+upload-stack:
+    ./scripts/upload-stack {{obs_project}}
+
 # Drop the cached build image so the next build-pkg re-provisions it.
 clean-image:
     docker rmi obs-build-image
