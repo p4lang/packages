@@ -62,22 +62,27 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Release ${{ steps.input.outputs.package }} @ ${{ steps.input.outputs.tag }}
+      - name: Record ${{ steps.input.outputs.package }} @ ${{ steps.input.outputs.tag }}
         env:
           # The changelog trailer identity, matching Maintainer in the control file.
           DEBFULLNAME: P4lang Authors
           DEBEMAIL: p4-dev@p4.org
+          PACKAGE: ${{ steps.input.outputs.package }}
+          TAG: ${{ steps.input.outputs.tag }}
+        run: just changelog-upstream-add "$PACKAGE" "$TAG"
+
+      # pi and bmv2 tags stop at the record above; they ride along here on
+      # the next p4c tag.
+      - name: Push the stack
+        if: steps.input.outputs.package == 'p4c'
+        env:
           OSC_APIURL: https://api.opensuse.org
           OSC_USERNAME: ${{ secrets.OBS_USERNAME }}
           OSC_PASSWORD: ${{ secrets.OBS_PASSWORD }}
-          PACKAGE: ${{ steps.input.outputs.package }}
-          TAG: ${{ steps.input.outputs.tag }}
-        run: |
-          just changelog-upstream-add "$PACKAGE" "$TAG"
-          just upload-src-pkg "$PACKAGE"
+        run: just upload-stack
 
       # The changelog is the version's source of truth, so record what was
-      # uploaded. Committed only after a successful upload: a failed run
+      # accepted. Committed only after any uploads succeed: a failed run
       # leaves no changelog entry, so a re-dispatch starts clean.
       - name: Commit the changelog
         env:
@@ -85,5 +90,5 @@ jobs:
           TAG: ${{ steps.input.outputs.tag }}
         run: |
           git add "p4lang-$PACKAGE/changelog"
-          git commit -m "Release $PACKAGE $TAG to the latest channel"
+          git commit -m "Record $PACKAGE $TAG for the latest channel"
           git push

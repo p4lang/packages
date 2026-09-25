@@ -25,6 +25,9 @@ for f in scripts/* scripts/test/*; do
     [[ -f "$f" ]] && bash -n "$f"
 done
 
+echo "running the upload-stack plan test..."
+./scripts/test/upload-stack-plan.sh || fail "upload-stack plan test failed"
+
 echo "parsing the justfile..."
 just --list >/dev/null
 

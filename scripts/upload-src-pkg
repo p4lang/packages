@@ -28,14 +28,13 @@ shopt -s nullglob; dscs=( "$srcdir"/*.dsc ); shopt -u nullglob
 (( ${#dscs[@]} == 1 )) || die "expected exactly one .dsc in $srcdir, found ${#dscs[@]}"
 dsc="${dscs[0]}"
 
-# Never overwrite a published version in place. OBS mirrors are eventually
-# consistent, and replacing content under an unchanged version confuses them.
-# A re-release must bump the Debian revision instead.
+# A published version only ever moves forward; a re-release must bump the
+# Debian revision instead.
 version=$(awk '/^Version:/ { print $2; exit }' "$dsc")
 [[ -n "$version" ]] || die "$dsc has no Version: field"
 if published=$("$script_dir/obs-published-version" "$project" "$package"); then
-    if [[ "$version" == "$published" ]]; then
-        echo "$package $version is already published on $project; nothing to upload."
+    if ! dpkg --compare-versions "$version" gt "$published"; then
+        echo "$package $version is not newer than $published on $project; nothing to upload."
         echo "(a re-release needs a new Debian revision: just changelog-add)"
         exit 0
     fi

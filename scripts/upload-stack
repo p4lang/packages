@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
+#
+# Upload the pi/bmv2/p4c stack to OBS without skipping levels: a level
+# uploads only when every level above it uploads too.
+#
+# Usage: upload-stack <project>
+
+set -Eeuo pipefail
+
+die() { echo "error: $*" >&2; exit 1; }
+
+# A level's standing: "ahead" when its changelog version is newer than the
+# published one (or nothing is published yet), else "current".
+level_status() {
+    local project=$1 pkg=$2 version published
+    version=$(dpkg-parsechangelog -l "p4lang-$pkg/changelog" -S Version)
+    if published=$("$script_dir/obs-published-version" "$project" "p4lang-$pkg"); then
+        if dpkg --compare-versions "$version" gt "$published"; then
+            echo ahead
+        else
+            echo current
+        fi
+    else
+        echo "could not read $pkg's published version; assuming a first upload." >&2
+        echo ahead
+    fi
+}
+
+# The levels to upload, in upload order, given each level's standing.
+plan_uploads() {
+    local pi=$1 bmv2=$2 p4c=$3
+    if [[ $pi == ahead && $bmv2 == ahead && $p4c == ahead ]]; then echo pi; fi
+    if [[ $bmv2 == ahead && $p4c == ahead ]]; then echo bmv2; fi
+    if [[ $p4c == ahead ]]; then echo p4c; fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    script_dir=$(dirname "$(readlink -f "$0")")
+    project="${1:?Usage: upload-stack <project>}"
+    [[ -f justfile ]] || die "run from the repo root"
+
+    pi=$(level_status "$project" pi)
+    bmv2=$(level_status "$project" bmv2)
+    p4c=$(level_status "$project" p4c)
+    echo "stack standing: pi=$pi bmv2=$bmv2 p4c=$p4c"
+
+    if [[ $bmv2 == ahead && $p4c != ahead ]]; then
+        echo "holding bmv2 back until a new p4c can ride on top."
+    fi
+    if [[ $pi == ahead && ( $bmv2 != ahead || $p4c != ahead ) ]]; then
+        echo "holding pi back until new bmv2 and p4c can ride on top."
+    fi
+
+    mapfile -t uploads < <(plan_uploads "$pi" "$bmv2" "$p4c")
+    if (( ${#uploads[@]} == 0 )); then
+        echo "nothing to upload: p4c is already current."
+        exit 0
+    fi
+
+    # Bottom-up, so a partially failed run stays resumable by re-dispatch.
+    for pkg in "${uploads[@]}"; do
+        "$script_dir/generate-src-pkg" "$pkg"
+        "$script_dir/upload-src-pkg" "$project" "p4lang-$pkg" "build/$pkg"
+    done
+fi
