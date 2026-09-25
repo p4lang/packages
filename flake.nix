@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
 {
   description = "P4lang packages development shell";
 
@@ -15,6 +19,7 @@
             pkgs.quilt
             pkgs.python3Packages.osc
             pkgs.actionlint
+            pkgs.reuse
           ];
         };
       };
