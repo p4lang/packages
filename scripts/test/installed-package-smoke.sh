@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
 #
 # Smoke test the published packages the way a user installs them: add the OBS
 # apt repo to a clean Ubuntu container, apt install p4lang-p4c, then drive the

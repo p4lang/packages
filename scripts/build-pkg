@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Build a Debian source package locally with `osc build` inside a privileged
 # Ubuntu Docker container.
 

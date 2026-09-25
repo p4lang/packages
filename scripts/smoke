@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
 #
 # Meta-check that the repo plumbing is self-consistent: scripts parse, the
 # justfile parses, and cross-references (justfile -> scripts, workflows ->
@@ -36,6 +41,9 @@ done < <(grep -rhoE --include='*.yml' --include='*.yaml' '\bjust +[a-z][a-z-]*' 
 
 echo "linting workflows..."
 actionlint -color || status=1
+
+echo "checking REUSE/SPDX compliance..."
+reuse lint --quiet || fail "REUSE/SPDX non-compliance (run: reuse lint)"
 
 (( status == 0 )) && echo "smoke: all checks passed"
 exit "$status"

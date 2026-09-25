@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # OBS project to push to
 obs_project := "home:p4lang"
 

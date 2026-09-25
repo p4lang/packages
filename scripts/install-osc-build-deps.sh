@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
 #
 # Provision an Ubuntu container with osc + the virtualization stack `osc build`
 # needs: KVM for native builds and qemu for cross-arch.

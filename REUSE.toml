@@ -1,0 +1,14 @@
+version = 1
+
+# The Debian packaging dirs predate the tooling: original packaging 2021,
+# reworked since. Their files (changelog, source/format, ...) mostly forbid
+# comments, so they are annotated here rather than with headers.
+[[annotations]]
+path = "p4lang-*/**"
+SPDX-FileCopyrightText = ["2021 Radostin Stoyanov", "2026 Bryan Richter"]
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "flake.lock"
+SPDX-FileCopyrightText = "2026 Bryan Richter"
+SPDX-License-Identifier = "Apache-2.0"
