@@ -23,7 +23,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Take (package, tag) from the dispatch payload or the manual inputs.
       # Passed through env, never interpolated into the shell, to avoid
@@ -51,7 +51,7 @@ jobs:
           sudo apt-get install -y osc devscripts dpkg-dev git
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v4
 
       # osc reads credentials from OSC_* env vars, but only once a config
       # file exists. (An empty one is a parse error, hence the [general] stub.)
