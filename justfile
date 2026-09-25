@@ -9,8 +9,7 @@ obs_project := "home:p4lang"
 smoke:
     ./scripts/smoke
 
-# Add a changelog entry. The trailer identity is DEBFULLNAME/DEBEMAIL if set,
-# else git's.
+# Add a changelog entry to the existing version.
 changelog-add package:
     DEBFULLNAME="${DEBFULLNAME:-$(git config user.name)}" \
     DEBEMAIL="${DEBEMAIL:-$(git config user.email)}" \
@@ -33,7 +32,7 @@ generate-src-pkg package:
 build-pkg +args:
     ./scripts/build-pkg {{args}}
 
-# Build <package> at its changelog version and upload it to the latest channel's OBS project.
+# Build <package> at its changelog version and upload it to OBS.
 upload-src-pkg package: (generate-src-pkg package)
     ./scripts/upload-src-pkg {{obs_project}} p4lang-{{package}} build/{{package}}
 
