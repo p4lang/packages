@@ -17,13 +17,15 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Take (package, tag) from the dispatch payload or the manual inputs.
       # Passed through env, never interpolated into the shell, to avoid
@@ -81,14 +83,24 @@ jobs:
           OSC_PASSWORD: ${{ secrets.OBS_PASSWORD }}
         run: just upload-stack
 
+      # Minted after the uploads, so its one-hour lifetime starts here.
+      - name: Mint a token for the changelog push
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       # The changelog is the version's source of truth, so record what was
       # accepted. Committed only after any uploads succeed: a failed run
       # leaves no changelog entry, so a re-dispatch starts clean.
+      # Pushed as the release App, the bypass actor on main's ruleset.
       - name: Commit the changelog
         env:
           PACKAGE: ${{ steps.input.outputs.package }}
           TAG: ${{ steps.input.outputs.tag }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git add "p4lang-$PACKAGE/changelog"
           git commit -m "Record $PACKAGE $TAG for the latest channel"
-          git push
+          git push "https://x-access-token:$TOKEN@github.com/$GITHUB_REPOSITORY" "HEAD:$GITHUB_REF"
