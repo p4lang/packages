@@ -77,7 +77,7 @@ jobs:
         if: steps.input.outputs.package == 'p4c'
         env:
           OSC_APIURL: https://api.opensuse.org
-          OSC_USERNAME: ${{ secrets.OBS_USERNAME }}
+          OSC_USERNAME: ${{ vars.OBS_USERNAME }}
           OSC_PASSWORD: ${{ secrets.OBS_PASSWORD }}
         run: just upload-stack
 
