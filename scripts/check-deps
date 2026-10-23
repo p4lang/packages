@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 Bryan Richter
+#
+# SPDX-License-Identifier: Apache-2.0
+
+#
+# Check that a package's build and runtime dependencies resolve on each target
+# distro, in that distro's stock container. A fast stand-in for an OBS
+# "unresolvable" verdict, without spending OBS time.
+#
+# Usage: check-deps <package> <obs-repo>...
+#
+# Example:
+#   check-deps bmv2 xUbuntu_24.04 Debian_12
+
+set -Eeuo pipefail
+
+die() { echo "error: $*" >&2; exit 1; }
+
+# The Build-Depends* and Depends relations of the control file on stdin, one
+# per line. Substvars and our own p4lang-* packages are dropped: neither is in
+# a distro archive.
+installable_relations() {
+    awk '/^[^[:space:]]/ { f = ($0 ~ /^(Build-Depends[^:]*|Depends):/); sub(/^[^:]*:/, "") }
+         f               { print }' \
+        | tr ',' '\n' \
+        | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+        | grep -vE '^$|^\$\{|^p4lang-' \
+        || true
+}
+
+# The stock container image for an OBS repository name.
+image_for_repo() {
+    case "$1" in
+        Debian_*)  echo "debian:${1#Debian_}" ;;
+        xUbuntu_*) echo "ubuntu:${1#xUbuntu_}" ;;
+        *) echo "no container image known for repo: $1" >&2; return 1 ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    usage="Usage: check-deps <package> <obs-repo>..."
+    pkg="${1:?$usage}"; shift
+    (( $# > 0 )) || die "$usage"
+    control="p4lang-$pkg/control"
+    [[ -f "$control" ]] || die "cannot find $control. Run from the repo root."
+
+    mapfile -t relations < <(installable_relations <"$control")
+
+    status=0
+    for repo in "$@"; do
+        image=$(image_for_repo "$repo")
+        if out=$(docker run --rm -e DEBIAN_FRONTEND=noninteractive "$image" \
+                bash -c 'apt-get update -qq >/dev/null && apt-get satisfy -s -qq "$@"' \
+                -- "${relations[@]}" 2>&1); then
+            echo "ok    $pkg on $repo"
+        else
+            status=1
+            echo "FAIL  $pkg on $repo"
+            sed 's/^/      /' <<<"$out"
+        fi
+    done
+    exit "$status"
+fi
