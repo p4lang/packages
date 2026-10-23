@@ -86,7 +86,7 @@ jobs:
       # Minted after the uploads, so its one-hour lifetime starts here.
       - name: Mint a token for the changelog push
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
