@@ -1,0 +1,20 @@
+Description: Take erase_if predicate elements by const reference
+ libstdc++ 12.2 (Debian 12) passes std::erase_if predicates a const element,
+ so a predicate taking a non-const reference doesn't compile there.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: no
+--- a/ir/visitor.cpp
++++ b/ir/visitor.cpp
+@@ -644,10 +644,10 @@
+     applySetupJoinPoints(root);
+ #if DEBUG_FLOW_JOIN
+     erase_if(*flow_join_points,
+-             [this](flow_join_points_t::value_type &el) { return el.second.count == 0; });
++             [this](const flow_join_points_t::value_type &el) { return el.second.count == 0; });
+ #endif
+     erase_if(*flow_join_points,
+-             [this](flow_join_points_t::value_type &el) { return filter_join_point(el.first); });
++             [this](const flow_join_points_t::value_type &el) { return filter_join_point(el.first); });
+ }
+ 
+ bool ControlFlowVisitor::join_flows(const IR::Node *n) {
