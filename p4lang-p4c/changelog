@@ -1,3 +1,9 @@
+p4lang-p4c (1.2.5.17-3) unstable; urgency=medium
+
+  * Build with Debian 12's libstdc++
+
+ -- Bryan Richter <b@chreekat.net>  Fri, 23 Oct 2026 13:07:32 +0300
+
 p4lang-p4c (1.2.5.17-2) unstable; urgency=medium
 
   * Depend on whichever libthrift the distro ships
