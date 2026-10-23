@@ -28,6 +28,10 @@ changelog-upstream-add package tag:
 generate-src-pkg package:
     ./scripts/generate-src-pkg {{package}}
 
+# Check that <package>'s dependencies resolve on each OBS repo's distro, in containers.
+check-deps package +repos:
+    ./scripts/check-deps {{package}} {{repos}}
+
 # Build .dsc locally via osc-in-Docker: [--clean|--dry-run] <srcdir> [repo] [arch]
 build-pkg +args:
     ./scripts/build-pkg {{args}}

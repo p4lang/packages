@@ -28,6 +28,9 @@ done
 echo "running the upload-stack plan test..."
 ./scripts/test/upload-stack-plan.sh || fail "upload-stack plan test failed"
 
+echo "running the check-deps test..."
+./scripts/test/check-deps.sh || fail "check-deps test failed"
+
 echo "parsing the justfile..."
 just --list >/dev/null
 
