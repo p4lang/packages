@@ -6,7 +6,7 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all optimize=-lto
 
 export DEB_CFLAGS_MAINT_APPEND=-g -O3
 export DEB_CXXFLAGS_MAINT_APPEND=-g -O3
