@@ -1,0 +1,18 @@
+Description: Give test_devmgr its own packet-in address
+ test_devmgr and simple_switch's test_packet_redirect both bound
+ ipc:///tmp/test_packet_in_abc123. ctest runs every test from one pool, so
+ under -j the two can overlap, and test_packet_redirect segfaults when it
+ loses the race.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: no
+--- a/tests/test_devmgr.cpp
++++ b/tests/test_devmgr.cpp
+@@ -295,7 +295,7 @@
+     return !memcmp(recv_buffer, send_buffer, size);
+   }
+ 
+-  const std::string addr = "ipc:///tmp/test_packet_in_abc123";
++  const std::string addr = "ipc:///tmp/test_devmgr_packet_in_abc123";
+ 
+   PacketInReceiver recv_switch{kMaxBufferSize};
+   PacketInReceiver recv_lib{kMaxBufferSize};
