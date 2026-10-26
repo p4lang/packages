@@ -32,9 +32,9 @@ generate-src-pkg package:
 check-deps package +repos:
     ./scripts/check-deps {{package}} {{repos}}
 
-# Build .dsc locally via osc-in-Docker: [--clean|--dry-run] <srcdir> [repo] [arch]
+# Build .dsc locally via osc-in-Docker, against obs_project: [--clean|--dry-run] <srcdir> [repo] [arch]
 build-pkg +args:
-    ./scripts/build-pkg {{args}}
+    LOCALBUILD_PROJECT={{obs_project}} ./scripts/build-pkg {{args}}
 
 # Build <package> at its changelog version and upload it to OBS.
 upload-src-pkg package: (generate-src-pkg package)

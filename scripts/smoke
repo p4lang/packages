@@ -31,6 +31,9 @@ echo "running the upload-stack plan test..."
 echo "running the check-deps test..."
 ./scripts/test/check-deps.sh || fail "check-deps test failed"
 
+echo "running the build-pkg project test..."
+./scripts/test/build-pkg-project.sh || fail "build-pkg project test failed"
+
 echo "parsing the justfile..."
 just --list >/dev/null
 
