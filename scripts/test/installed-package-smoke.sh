@@ -11,25 +11,29 @@
 # generate tests from it with p4testgen, generate a fresh program with p4smith
 # and compile that one too.
 #
-# Run: ./scripts/test/installed-package-smoke.sh [project] [distro]
+# Run: ./scripts/test/installed-package-smoke.sh [project] [distro] [arch]
+# arch is an OBS arch name, x86_64 (default) or aarch64; aarch64 runs under
+# qemu binfmt emulation on an x86 host.
 # SMOKE_IMAGE overrides the base image (default: the distro's own image).
 
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 
-source scripts/check-deps  # for image_for_repo
+source scripts/check-deps  # for image_for_repo, platform_for_arch
 set +eE  # check-deps' errexit; this script reports failures itself
 
 project="${1:-home:p4lang}"
 distro="${2:-xUbuntu_22.04}"
+arch="${3:-x86_64}"
 image="${SMOKE_IMAGE:-$(image_for_repo "$distro")}" || exit 1
+platform="$(platform_for_arch "$arch")" || exit 1
 # OBS serves project home:p4lang:latest at .../home:/p4lang:/latest/
 repo_url="https://download.opensuse.org/repositories/${project//:/:/}/${distro}/"
 
-echo "Smoke-testing $project ($distro) in $image"
+echo "Smoke-testing $project ($distro, $arch) in $image"
 echo "  repo: $repo_url"
 
-docker run --rm -i -e REPO_URL="$repo_url" "$image" bash -s <<'CONTAINER'
+docker run --rm -i --platform "$platform" -e REPO_URL="$repo_url" "$image" bash -s <<'CONTAINER'
 set -uo pipefail
 export DEBIAN_FRONTEND=noninteractive
 

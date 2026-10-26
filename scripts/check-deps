@@ -39,6 +39,16 @@ image_for_repo() {
     esac
 }
 
+# The docker platform for an OBS arch name. Runs of a stock distro image name
+# one, since its local tag points at whichever arch was pulled last.
+platform_for_arch() {
+    case "$1" in
+        x86_64)  echo linux/amd64 ;;
+        aarch64) echo linux/arm64 ;;
+        *) echo "no docker platform known for arch: $1" >&2; return 1 ;;
+    esac
+}
+
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     usage="Usage: check-deps <package> <obs-repo>..."
     pkg="${1:?$usage}"; shift
@@ -51,7 +61,8 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     status=0
     for repo in "$@"; do
         image=$(image_for_repo "$repo")
-        if out=$(docker run --rm -e DEBIAN_FRONTEND=noninteractive "$image" \
+        if out=$(docker run --rm --platform "$(platform_for_arch x86_64)" \
+                -e DEBIAN_FRONTEND=noninteractive "$image" \
                 bash -c 'apt-get update -qq >/dev/null && apt-get satisfy -s -qq "$@"' \
                 -- "${relations[@]}" 2>&1); then
             echo "ok    $pkg on $repo"

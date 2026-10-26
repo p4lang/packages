@@ -33,8 +33,8 @@ check-deps package +repos:
     ./scripts/check-deps {{package}} {{repos}}
 
 # Install obs_project's published packages for <repo> in a clean container and drive the binaries.
-installed-smoke repo:
-    ./scripts/test/installed-package-smoke.sh {{obs_project}} {{repo}}
+installed-smoke repo arch="x86_64":
+    ./scripts/test/installed-package-smoke.sh {{obs_project}} {{repo}} {{arch}}
 
 # Build .dsc locally via osc-in-Docker, against obs_project: [--clean|--dry-run] <srcdir> [repo] [arch]
 build-pkg +args:
