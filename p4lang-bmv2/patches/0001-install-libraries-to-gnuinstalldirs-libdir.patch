@@ -1,0 +1,131 @@
+Description: Install libraries to GNUInstallDirs' libdir
+ A hard-coded lib/ ignores the multiarch libdir that debhelper passes in.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: no
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -19,6 +19,7 @@
+ include(CheckIncludeFiles)
+ include(CheckIncludeFileCXX)
+ include(GenerateThrift)
++include(GNUInstallDirs)
+ 
+ # Extract version from VERSION file
+ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" BM_VERSION)
+--- a/PI/CMakeLists.txt
++++ b/PI/CMakeLists.txt
+@@ -40,8 +40,8 @@
+ endif()
+ 
+ install(TARGETS bmpi
+-  LIBRARY DESTINATION lib
+-  ARCHIVE DESTINATION lib
++  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ )
+ 
+ install(FILES bm/PI/pi.h
+--- a/pdfixed/CMakeLists.txt
++++ b/pdfixed/CMakeLists.txt
+@@ -84,6 +84,6 @@
+ )
+ 
+ install(TARGETS bmpdfixed bmpdfixed_thrift
+-  LIBRARY DESTINATION lib
+-  ARCHIVE DESTINATION lib
++  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ )
+--- a/services/CMakeLists.txt
++++ b/services/CMakeLists.txt
+@@ -60,8 +60,8 @@
+ 
+ # Install library
+ install(TARGETS bm_grpc_dataplane
+-  LIBRARY DESTINATION lib
+-  ARCHIVE DESTINATION lib
++  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ )
+ 
+ # Python file handling
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -36,8 +36,8 @@
+ 
+ # Install library
+ install(TARGETS bmall
+-  LIBRARY DESTINATION lib
+-  ARCHIVE DESTINATION lib
++  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ )
+ 
+ # Match the autoconf install surface, which provides a shared wrapper library
+@@ -57,7 +57,7 @@
+   )
+ 
+   install(TARGETS bmp4apps
+-    LIBRARY DESTINATION lib
+-    ARCHIVE DESTINATION lib
++    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+   )
+ endif()
+--- a/targets/pna_nic/CMakeLists.txt
++++ b/targets/pna_nic/CMakeLists.txt
+@@ -116,7 +116,7 @@
+ 
+   # Install libraries
+   install(TARGETS pnanic_thrift
+-    LIBRARY DESTINATION lib
+-    ARCHIVE DESTINATION lib
++    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+   )
+ endif()
+--- a/targets/psa_switch/CMakeLists.txt
++++ b/targets/psa_switch/CMakeLists.txt
+@@ -117,7 +117,7 @@
+ 
+   # Install libraries
+   install(TARGETS psaswitch_thrift
+-    LIBRARY DESTINATION lib
+-    ARCHIVE DESTINATION lib
++    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+   )
+ endif()
+--- a/targets/simple_switch/CMakeLists.txt
++++ b/targets/simple_switch/CMakeLists.txt
+@@ -150,8 +150,8 @@
+ 
+   # Install libraries
+   install(TARGETS simpleswitch_thrift
+-    LIBRARY DESTINATION lib
+-    ARCHIVE DESTINATION lib
++    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+   )
+ endif()
+ 
+@@ -162,6 +162,6 @@
+ 
+ # Install libraries
+ install(TARGETS simpleswitch simpleswitch_runner
+-  LIBRARY DESTINATION lib
+-  ARCHIVE DESTINATION lib
++  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ )
+--- a/thrift_src/CMakeLists.txt
++++ b/thrift_src/CMakeLists.txt
+@@ -54,6 +54,6 @@
+ 
+ # Install library
+ install(TARGETS runtimestubs
+-  LIBRARY DESTINATION lib
+-  ARCHIVE DESTINATION lib
++  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ )
