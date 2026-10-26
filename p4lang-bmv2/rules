@@ -21,7 +21,10 @@ pkgdir := $(CURDIR)/debian/p4lang-bmv2
 	dh $@ --with python3 --buildsystem=cmake
 
 override_dh_auto_configure:
+	# Compiler caching is the build environment's job (OBS's useccache);
+	# a preset CCACHE_PROGRAM stops upstream's search for a ccache launcher.
 	dh_auto_configure -- \
+		-DCCACHE_PROGRAM=OFF \
 		-DWITH_PDFIXED=ON \
 		-DWITH_THRIFT=ON \
 		-DWITH_NANOMSG=ON \

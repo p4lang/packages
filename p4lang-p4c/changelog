@@ -1,3 +1,9 @@
+p4lang-p4c (1.2.5.17-6) unstable; urgency=medium
+
+  * Leave compiler caching to the build environment
+
+ -- Bryan Richter <b@chreekat.net>  Mon, 26 Oct 2026 15:04:08 +0200
+
 p4lang-p4c (1.2.5.17-5) unstable; urgency=medium
 
   * Build with Z3 4.12 and newer
