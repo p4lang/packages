@@ -1,6 +1,7 @@
 p4lang-pi (0.1.4-2) unstable; urgency=medium
 
   * Build with Boost 1.89 and newer
+  * Build the bundled googletest with GCC 15
 
  -- Bryan Richter <b@chreekat.net>  Mon, 26 Oct 2026 08:55:52 +0200
 
