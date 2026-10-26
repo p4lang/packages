@@ -1,1 +1,2 @@
 0001-install-libraries-to-gnuinstalldirs-libdir.patch
+0002-link-absl-into-simple_switch_grpc.patch
