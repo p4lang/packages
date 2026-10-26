@@ -1,0 +1,18 @@
+Description: Stop requiring a libboost_system library
+ Boost.System has been header-only since 1.69, and Boost 1.89 stopped
+ shipping its stub library, so AX_BOOST_SYSTEM fails there. This backports
+ the configure.ac part of the upstream commit; the Dockerfile it also adds
+ is omitted.
+Author: Andy Fingerhut <andy.fingerhut@gmail.com>
+Origin: upstream, https://github.com/p4lang/PI/commit/537c8bd59c4eeca87784293d9a57538f513e2626
+--- a/proto/configure.ac
++++ b/proto/configure.ac
+@@ -62,8 +62,6 @@ AM_CONDITIONAL([HAVE_GRPC_PY_PLUGIN], [test "x$GRPC_PY_PLUGIN" != x])
+
+ AX_BOOST_BASE([1.54.0], [], [AC_MSG_ERROR(
+               [Please install boost >= 1.54.0 (thread and system)])])
+-AX_BOOST_SYSTEM
+-AC_SUBST([BOOST_SYSTEM_LIB])
+
+ want_bmv2=no
+ AC_ARG_WITH([bmv2],
