@@ -6,10 +6,10 @@
 
 #
 # Smoke test the published packages the way a user installs them: add the OBS
-# apt repo to a clean container of the repo's distro, apt install p4lang-p4c,
-# then drive the binaries -- compile a P4 program with p4c, generate tests from
-# it with p4testgen, generate a fresh program with p4smith and compile that one
-# too.
+# apt repo to a clean container of the repo's distro, apt install p4lang-p4c
+# and p4lang-bmv2, then drive the binaries -- compile a P4 program with p4c,
+# generate tests from it with p4testgen, generate a fresh program with p4smith
+# and compile that one too.
 #
 # Run: ./scripts/test/installed-package-smoke.sh [project] [distro]
 # SMOKE_IMAGE overrides the base image (default: the distro's own image).
@@ -120,8 +120,8 @@ run    "p4c runs minimally"     p4c --target bmv2 --arch v1model -o /work /work/
 rm -f /work/basic.json
 
 echo "== full install =="
-# Recommends should pull the runtime in for the default `apt install` path.
-apt-get install -y p4lang-p4c >/tmp/apt.log 2>&1 || die "apt-get install p4lang-p4c"
+# bmv2 is the runtime; its Depends pull pi in.
+apt-get install -y p4lang-p4c p4lang-bmv2 >/tmp/apt.log 2>&1 || die "apt-get install p4lang-p4c p4lang-bmv2"
 for p in p4lang-p4c p4lang-bmv2 p4lang-pi; do
     if dpkg -s "$p" >/dev/null 2>&1; then ok "$p installed"; else ng "$p installed"; fi
 done
