@@ -1,0 +1,15 @@
+Description: Include stdint.h where bundled googletest uses uintptr_t
+ GCC 15's libstdc++ no longer pulls in uintptr_t transitively, so the bundled
+ googletest's death-test source doesn't compile on Ubuntu 26.04.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: no
+--- a/third_party/googletest/googletest/src/gtest-death-test.cc
++++ b/third_party/googletest/googletest/src/gtest-death-test.cc
+@@ -46,6 +46,7 @@
+ # include <errno.h>
+ # include <fcntl.h>
+ # include <limits.h>
++# include <stdint.h>
+ 
+ # if GTEST_OS_LINUX
+ #  include <signal.h>
