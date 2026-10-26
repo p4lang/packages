@@ -17,6 +17,9 @@
 #
 # LOCALBUILD_VM_TYPE overrides the chosen vm-type.
 #
+# LOCALBUILD_PROJECT names the OBS project whose repos and packages the build
+# uses (default home:p4lang).
+#
 # NB 1: On NixOS and possibly other hosts, vm-type=chroot is broken, so builds
 # are usually very slow. (util-linux/getopt installs too late for some postinst
 # scripts). You can try it out, though, by setting LOCALBUILD_VM_TYPE=chroot.
@@ -41,6 +44,7 @@ done
 srcdir="${1:?Usage: build-package [--dry-run] [--clean] <srcdir> [repo] [arch]}"
 repo="${2:-xUbuntu_22.04}"
 arch="${3:-x86_64}"
+project="${LOCALBUILD_PROJECT:-home:p4lang}"
 
 [[ -d "$srcdir" ]] || die "no such dir: $srcdir"
 srcdir_abs="$(cd "$srcdir" && pwd)"
@@ -51,9 +55,9 @@ dsc="$(basename "${dscs[0]}")"
 # osc caches _buildinfo-/_buildconfig- files in its cwd, and --noinit/--offline
 # read them back, so the workdir must persist across runs.
 #
-# We persist per package, since the filenames are keyed by repo-arch only, and
-# would otherwise overwrite each other.
-workdir_host="$PWD/build/.osc-work/$(basename "$srcdir_abs")"
+# We persist per project and package, since the filenames are keyed by
+# repo-arch only, and would otherwise overwrite each other.
+workdir_host="$PWD/build/.osc-work/$project/$(basename "$srcdir_abs")"
 mkdir -p "$workdir_host"
 
 # osc's --noinit/--offline path insists the cwd is an .osc package working
@@ -61,7 +65,7 @@ mkdir -p "$workdir_host"
 # --local-package). Give it the bare minimum files to run without actually
 # creating a full .osc copy.
 mkdir -p "$workdir_host/.osc"
-printf 'home:p4lang\n' > "$workdir_host/.osc/_project"
+printf '%s\n' "$project" > "$workdir_host/.osc/_project"
 printf '%s\n' "${dsc%%_*}" > "$workdir_host/.osc/_package"
 
 # The .dsc's Build-Depends* fields, continuations included.
@@ -210,7 +214,7 @@ run docker run --rm "${tty_args[@]}" --privileged \
     --workdir /work \
     obs-build-image \
     osc --config /tmp/osc.config build --trust-all-projects "${vm_args[@]}" "${jobs_args[@]}" "${fast_args[@]}" \
-        --alternative-project home:p4lang --local-package \
+        --alternative-project "$project" --local-package \
         "$repo" "$arch" "/pkg/$dsc" \
     || status=$?
 
