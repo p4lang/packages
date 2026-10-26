@@ -21,7 +21,9 @@ clean:
 	dh_clean
 
 override_dh_auto_configure:
+	# Compiler caching is the build environment's job (OBS's useccache).
 	dh_auto_configure --builddirectory=build/ -- \
+		-DENABLE_CCACHE=OFF \
 		-DFETCHCONTENT_FULLY_DISCONNECTED=ON \
 		-DFETCHCONTENT_SOURCE_DIR_PROTOBUF=$(CURDIR)/protobuf \
 		-DFETCHCONTENT_SOURCE_DIR_ABSEIL=$(CURDIR)/abseil \

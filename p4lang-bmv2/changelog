@@ -1,3 +1,9 @@
+p4lang-bmv2 (1.15.6-6) unstable; urgency=medium
+
+  * Leave compiler caching to the build environment
+
+ -- Bryan Richter <b@chreekat.net>  Mon, 26 Oct 2026 15:04:09 +0200
+
 p4lang-bmv2 (1.15.6-5) unstable; urgency=medium
 
   * Give test_devmgr its own packet-in address, so tests can run in
