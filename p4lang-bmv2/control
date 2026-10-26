@@ -3,7 +3,6 @@ Section: net
 Priority: optional
 Maintainer: P4lang Authors <p4-dev@p4.org>
 Build-Depends:
-    automake,
     build-essential,
     cmake,
     curl,
@@ -28,7 +27,6 @@ Build-Depends:
     libprotoc-dev,
     libssl-dev,
     libthrift-dev,
-    libtool,
     libxxhash-dev,
     pkg-config,
     protobuf-compiler,

@@ -1,3 +1,9 @@
+p4lang-bmv2 (1.15.6-4) unstable; urgency=medium
+
+  * Build with upstream's CMake build
+
+ -- Bryan Richter <b@chreekat.net>  Mon, 26 Oct 2026 09:15:46 +0200
+
 p4lang-bmv2 (1.15.6-3) unstable; urgency=medium
 
   * Build without LTO
