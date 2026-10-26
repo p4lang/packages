@@ -6,19 +6,23 @@
 
 #
 # Smoke test the published packages the way a user installs them: add the OBS
-# apt repo to a clean Ubuntu container, apt install p4lang-p4c, then drive the
-# binaries -- compile a P4 program with p4c, generate tests from it with
-# p4testgen, generate a fresh program with p4smith and compile that one too.
+# apt repo to a clean container of the repo's distro, apt install p4lang-p4c,
+# then drive the binaries -- compile a P4 program with p4c, generate tests from
+# it with p4testgen, generate a fresh program with p4smith and compile that one
+# too.
 #
 # Run: ./scripts/test/installed-package-smoke.sh [project] [distro]
-# SMOKE_IMAGE overrides the base image (default ubuntu:22.04).
+# SMOKE_IMAGE overrides the base image (default: the distro's own image).
 
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 
+source scripts/check-deps  # for image_for_repo
+set +eE  # check-deps' errexit; this script reports failures itself
+
 project="${1:-home:p4lang}"
 distro="${2:-xUbuntu_22.04}"
-image="${SMOKE_IMAGE:-ubuntu:22.04}"
+image="${SMOKE_IMAGE:-$(image_for_repo "$distro")}" || exit 1
 # OBS serves project home:p4lang:latest at .../home:/p4lang:/latest/
 repo_url="https://download.opensuse.org/repositories/${project//:/:/}/${distro}/"
 

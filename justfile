@@ -32,6 +32,10 @@ generate-src-pkg package:
 check-deps package +repos:
     ./scripts/check-deps {{package}} {{repos}}
 
+# Install obs_project's published packages for <repo> in a clean container and drive the binaries.
+installed-smoke repo:
+    ./scripts/test/installed-package-smoke.sh {{obs_project}} {{repo}}
+
 # Build .dsc locally via osc-in-Docker, against obs_project: [--clean|--dry-run] <srcdir> [repo] [arch]
 build-pkg +args:
     LOCALBUILD_PROJECT={{obs_project}} ./scripts/build-pkg {{args}}
