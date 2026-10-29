@@ -1,0 +1,23 @@
+Description: Link a preinstalled bdwgc as FindLibGc finds it
+ The libgctba check replaced FindLibGc's libgc and libgccpp with "gc cord"
+ when libgctba was missing (Ubuntu 22.04), dropping libgccpp and linking a
+ libcord Debian and Ubuntu don't ship.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: https://github.com/p4lang/p4c/tree/b/preinstalled-bdwgc-as-found
+diff --git a/cmake/BDWGC.cmake b/cmake/BDWGC.cmake
+index 30cc81c570..a47a609523 100644
+--- a/cmake/BDWGC.cmake
++++ b/cmake/BDWGC.cmake
+@@ -14,12 +14,6 @@ macro(p4c_obtain_bdwgc)
+   if(P4C_USE_PREINSTALLED_BDWGC)
+     option(ENABLE_MULTITHREAD "Use multithreading" OFF)
+     find_package(LibGc 7.2.0 REQUIRED)
+-    # Some distros ship libgc/libcord without libgctba; only add it if present.
+-    find_library(LIBGC_GCTBA_LIBRARY NAMES gctba)
+-    if(NOT LIBGC_GCTBA_LIBRARY)
+-      message(STATUS "libgctba not found; using libgc/libcord only")
+-      set(LIBGC_LIBRARIES gc cord)
+-    endif()
+     check_function_exists (GC_print_stats HAVE_GC_PRINT_STATS)
+   else()
+     # Print out download state while setting up BDWGC.

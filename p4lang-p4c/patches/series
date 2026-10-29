@@ -1,4 +1,4 @@
-0001-link-only-installed-bdwgc-components.patch
+0001-link-preinstalled-bdwgc-as-found.patch
 0002-lower-preinstalled-z3-floor.patch
 0003-erase-if-predicates-take-const-elements.patch
 0004-gc-answers-malloc-usable-size.patch
