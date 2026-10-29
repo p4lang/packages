@@ -1,4 +1,4 @@
 0001-install-libraries-to-gnuinstalldirs-libdir.patch
 0002-link-absl-into-simple_switch_grpc.patch
-0003-give-test-devmgr-its-own-packet-in-address.patch
+0003-give-each-test-process-its-own-ipc-addresses.patch
 0004-measure-cpu-time-in-ternary-cache-lookup-cmp.patch

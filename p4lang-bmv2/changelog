@@ -1,3 +1,9 @@
+p4lang-bmv2 (1.15.6-8) unstable; urgency=medium
+
+  * Give each test process its own nanomsg IPC addresses
+
+ -- Bryan Richter <b@chreekat.net>  Thu, 29 Oct 2026 16:28:39 +0200
+
 p4lang-bmv2 (1.15.6-7) unstable; urgency=medium
 
   * Backport p4lang/behavioral-model#1469: time
