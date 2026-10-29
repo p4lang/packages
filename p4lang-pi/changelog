@@ -1,3 +1,10 @@
+p4lang-pi (0.1.4-3) unstable; urgency=medium
+
+  * Keep p4info's optional labels; PI passes protoc 3.12-3.14 the flag
+    they need
+
+ -- Bryan Richter <b@chreekat.net>  Thu, 29 Oct 2026 12:21:38 +0200
+
 p4lang-pi (0.1.4-2) unstable; urgency=medium
 
   * Build with Boost 1.89 and newer
