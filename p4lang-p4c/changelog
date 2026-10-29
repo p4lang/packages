@@ -1,3 +1,9 @@
+p4lang-p4c (1.2.5.17-8) unstable; urgency=medium
+
+  * Link a preinstalled bdwgc as FindLibGc finds it
+
+ -- Bryan Richter <b@chreekat.net>  Thu, 29 Oct 2026 17:38:09 +0200
+
 p4lang-p4c (1.2.5.17-7) unstable; urgency=medium
 
   * Log the compiler cache hit rate
