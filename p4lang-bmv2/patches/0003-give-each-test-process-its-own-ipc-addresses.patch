@@ -1,0 +1,70 @@
+Description: Give each test process its own nanomsg IPC addresses
+ test_devmgr and simple_switch's test_packet_redirect both bound
+ ipc:///tmp/test_packet_in_abc123, so under ctest -j test_packet_redirect
+ segfaulted when the two overlapped.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: https://github.com/p4lang/behavioral-model/tree/b/unique-test-ipc-addresses
+diff --git a/targets/simple_switch/tests/test_packet_redirect.cpp b/targets/simple_switch/tests/test_packet_redirect.cpp
+index fd8c97dc..dfc14cfc 100644
+--- a/targets/simple_switch/tests/test_packet_redirect.cpp
++++ b/targets/simple_switch/tests/test_packet_redirect.cpp
+@@ -23,6 +23,8 @@
+ #include <string>
+ #include <vector>
+ 
++#include <unistd.h>
++
+ #include "simple_switch.h"
+ 
+ namespace fs = std::filesystem;
+@@ -128,8 +130,8 @@ class SimpleSwitch_PacketRedirectP4 : public ::testing::Test {
+   }
+ 
+  protected:
+-  static const char event_logger_addr[];
+-  static const char packet_in_addr[];
++  static const std::string event_logger_addr;
++  static const std::string packet_in_addr;
+   static SimpleSwitch *test_switch;
+   bm_apps::PacketInject packet_inject;
+   PacketInReceiver receiver{};
+@@ -146,10 +148,11 @@ class SimpleSwitch_PacketRedirectP4 : public ::testing::Test {
+ // packet drops are to be expected when the phblisher is faster than the
+ // consummer. However, I do not believe my consummer is that slow and I never
+ // observe the drops with 'ipc'
+-const char SimpleSwitch_PacketRedirectP4::event_logger_addr[] =
+-    "ipc:///tmp/test_events_abc123";
+-const char SimpleSwitch_PacketRedirectP4::packet_in_addr[] =
+-    "ipc:///tmp/test_packet_in_abc123";
++// Per-process, so concurrent test processes never share the sockets.
++const std::string SimpleSwitch_PacketRedirectP4::event_logger_addr =
++    "ipc:///tmp/test_packet_redirect_events_" + std::to_string(getpid());
++const std::string SimpleSwitch_PacketRedirectP4::packet_in_addr =
++    "ipc:///tmp/test_packet_redirect_packet_in_" + std::to_string(getpid());
+ 
+ SimpleSwitch *SimpleSwitch_PacketRedirectP4::test_switch = nullptr;
+ 
+diff --git a/tests/test_devmgr.cpp b/tests/test_devmgr.cpp
+index f0ad2511..0a9b7b3a 100644
+--- a/tests/test_devmgr.cpp
++++ b/tests/test_devmgr.cpp
+@@ -22,6 +22,8 @@
+ #include <string>
+ #include <vector>
+ 
++#include <unistd.h>
++
+ #include "utils.h"
+ 
+ using namespace bm;
+@@ -295,7 +297,9 @@ class PacketInDevMgrTest : public ::testing::Test {
+     return !memcmp(recv_buffer, send_buffer, size);
+   }
+ 
+-  const std::string addr = "ipc:///tmp/test_packet_in_abc123";
++  // Per-process, so concurrent test processes never share the socket.
++  const std::string addr =
++      "ipc:///tmp/test_devmgr_packet_in_" + std::to_string(getpid());
+ 
+   PacketInReceiver recv_switch{kMaxBufferSize};
+   PacketInReceiver recv_lib{kMaxBufferSize};
