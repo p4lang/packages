@@ -49,4 +49,7 @@ override_dh_auto_configure:
 
 
 override_dh_auto_install:
+	# The build environment's compiler cache hit rate, when it has one.
+	-ccache --zero-stats
 	dh_auto_install --builddirectory=build/ -- DESTDIR=$(CURDIR)/debian/p4lang-p4c install
+	-ccache --show-stats --verbose
