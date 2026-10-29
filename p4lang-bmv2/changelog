@@ -1,3 +1,10 @@
+p4lang-bmv2 (1.15.6-7) unstable; urgency=medium
+
+  * Backport p4lang/behavioral-model#1469: time
+    TableTernaryCache.LookupCmp by CPU over more lookups
+
+ -- Bryan Richter <b@chreekat.net>  Thu, 29 Oct 2026 11:43:59 +0200
+
 p4lang-bmv2 (1.15.6-6) unstable; urgency=medium
 
   * Leave compiler caching to the build environment
