@@ -1,3 +1,9 @@
+p4lang-bmv2 (1.15.7-2) unstable; urgency=medium
+
+  * Publish packet trace files atomically
+
+ -- Bryan Richter <b@chreekat.net>  Fri, 30 Oct 2026 08:57:16 +0200
+
 p4lang-bmv2 (1.15.7-1) unstable; urgency=medium
 
   * New upstream release
