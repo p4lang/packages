@@ -25,6 +25,7 @@ override_dh_auto_configure:
 	# a preset CCACHE_PROGRAM stops upstream's search for a ccache launcher.
 	dh_auto_configure -- \
 		-DCCACHE_PROGRAM=OFF \
+		-DCMAKE_INSTALL_PYTHON_SET_DIR=/usr/lib/python3/dist-packages \
 		-DWITH_PDFIXED=ON \
 		-DWITH_THRIFT=ON \
 		-DWITH_NANOMSG=ON \
@@ -40,5 +41,5 @@ override_dh_auto_install:
 		$(pkgdir)/usr/share/simple_router \
 		$(pkgdir)/usr/share/behavioral-model \
 		$(pkgdir)/usr/share/doc/behavioral-model
-	# Thrift's gen-py root marker; site-packages itself is not a package.
-	rm $(pkgdir)/usr/lib/python3*/site-packages/__init__.py
+	# Thrift's gen-py root marker; dist-packages itself is not a package.
+	rm $(pkgdir)/usr/lib/python3/dist-packages/__init__.py
