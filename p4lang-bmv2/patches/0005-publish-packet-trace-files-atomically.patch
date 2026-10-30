@@ -1,0 +1,68 @@
+Description: Publish packet trace files atomically
+ flush_trace created trace_<id>.txtpb empty and then wrote it, which raced
+ any reader of the trace directory. An empty file parses as an empty
+ PacketTrace, which test_packet_trace could accept as a trace without events.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: https://github.com/p4lang/behavioral-model/tree/b/atomic-packet-trace-files
+diff --git a/src/bm_sim/packet_tracer.cpp b/src/bm_sim/packet_tracer.cpp
+index aa702741..20007d23 100644
+--- a/src/bm_sim/packet_tracer.cpp
++++ b/src/bm_sim/packet_tracer.cpp
+@@ -76,11 +76,24 @@ void PacketTracer::flush_trace(const p4::bm::PacketTrace& trace) {
+   auto path = std::filesystem::path(output_dir_) /
+               ("trace_" + std::to_string(trace.input().packet_id()) + ".txtpb");
+ 
+-  std::ofstream out(path);
+-  if (out.is_open()) {
++  // Written aside and renamed into place, so a trace_*.txtpb file is always
++  // complete.
++  auto tmp_path = path;
++  tmp_path += ".tmp";
++  {
++    std::ofstream out(tmp_path);
+     out << txtpb;
+-  } else {
+-    BMLOG_ERROR("Failed to write trace to {}", path.string());
++    out.close();
++    if (!out) {
++      BMLOG_ERROR("Failed to write trace to {}", tmp_path.string());
++      return;
++    }
++  }
++  std::error_code ec;
++  std::filesystem::rename(tmp_path, path, ec);
++  if (ec) {
++    BMLOG_ERROR("Failed to rename trace {} to {}: {}", tmp_path.string(),
++                path.string(), ec.message());
+   }
+ }
+ 
+diff --git a/targets/simple_switch/tests/test_packet_trace.cpp b/targets/simple_switch/tests/test_packet_trace.cpp
+index d8356990..7892122a 100644
+--- a/targets/simple_switch/tests/test_packet_trace.cpp
++++ b/targets/simple_switch/tests/test_packet_trace.cpp
+@@ -235,20 +235,20 @@ void add_exact_entry(SimpleSwitch* sw, std::ostream& os,
+ 
+ // Reads all trace files from dir, keyed by the global packet id recorded in
+ // the trace (so iteration order is numeric injection order, not lexicographic
+-// file-name order). Only files that parse as a complete p4::bm::PacketTrace
+-// textproto are kept (a file may be observed mid-write since traces are
+-// flushed from the switch's processing threads).
++// file-name order). Files still being written lack the .txtpb extension.
+ std::map<uint64_t, p4::bm::PacketTrace> read_traces(const fs::path& dir) {
+   std::map<uint64_t, p4::bm::PacketTrace> traces;
+   std::error_code ec;
+   for (const auto& entry : fs::directory_iterator(dir, ec)) {
++    if (entry.path().extension() != ".txtpb") continue;
+     std::ifstream in(entry.path());
+-    if (!in.is_open()) continue;
+     std::stringstream ss;
+     ss << in.rdbuf();
+     p4::bm::PacketTrace trace;
+     if (google::protobuf::TextFormat::ParseFromString(ss.str(), &trace)) {
+       traces[trace.input().packet_id()] = std::move(trace);
++    } else {
++      std::cout << "ERROR: cannot parse " << entry.path().filename() << "\n";
+     }
+   }
+   return traces;
