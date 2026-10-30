@@ -1,3 +1,16 @@
+p4lang-bmv2 (1.15.7-2) unstable; urgency=medium
+
+  * Publish packet trace files atomically
+
+ -- Bryan Richter <b@chreekat.net>  Fri, 30 Oct 2026 08:57:16 +0200
+
+p4lang-bmv2 (1.15.7-1) unstable; urgency=medium
+
+  * New upstream release
+  * Install Python modules to /usr/lib/python3/dist-packages
+
+ -- Bryan Richter <b@chreekat.net>  Fri, 30 Oct 2026 07:52:37 +0200
+
 p4lang-bmv2 (1.15.6-8) unstable; urgency=medium
 
   * Give each test process its own nanomsg IPC addresses
