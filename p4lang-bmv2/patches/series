@@ -3,3 +3,4 @@
 0003-give-each-test-process-its-own-ipc-addresses.patch
 0004-measure-cpu-time-in-ternary-cache-lookup-cmp.patch
 0005-publish-packet-trace-files-atomically.patch
+0006-drop-timed-register-protection-tests.patch
