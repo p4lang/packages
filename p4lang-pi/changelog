@@ -1,3 +1,9 @@
+p4lang-pi (0.1.6-1) unstable; urgency=medium
+
+  * Upstream release
+
+ -- P4lang Authors <p4-dev@p4.org>  Fri, 13 Nov 2026 02:07:30 +0000
+
 p4lang-pi (0.1.4-3) unstable; urgency=medium
 
   * Keep p4info's optional labels; PI passes protoc 3.12-3.14 the flag
