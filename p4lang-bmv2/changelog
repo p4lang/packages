@@ -1,3 +1,10 @@
+p4lang-bmv2 (1.15.8-3) unstable; urgency=medium
+
+  * Backport p4lang/behavioral-model#1477: drive the ageing and periodic
+    task tests with a manual clock
+
+ -- Bryan Richter <b@chreekat.net>  Tue, 24 Nov 2026 13:24:31 +0200
+
 p4lang-bmv2 (1.15.8-2) unstable; urgency=medium
 
   * Drop the patches 1.15.8 merged upstream
