@@ -20,10 +20,10 @@ index 788ede9a..5759b1ec 100644
  bm/bm_sim/control_flow.h \
 diff --git a/include/bm/bm_sim/clock.h b/include/bm/bm_sim/clock.h
 new file mode 100644
-index 00000000..40ca2548
+index 00000000..1377dfc6
 --- /dev/null
 +++ b/include/bm/bm_sim/clock.h
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,66 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Bryan Richter
 + *
@@ -41,22 +41,34 @@ index 00000000..40ca2548
 +
 +namespace bm {
 +
-+//! The time base of packet ingress timestamps, match entry ageing and periodic
-+//! tasks. One instance serves the whole process; see get() and set().
++//! The time base of packet ingress timestamps, match entry ageing, and
++//! periodic tasks. One instance serves the whole process; see get() and set().
 +class ClockIface {
 + public:
 +  using clock = std::chrono::system_clock;
 +
++  //! A condition variable whose waits and notifications go through the
++  //! installed clock.
++  class Condvar {
++   public:
++    //! Waits until notified or until now() reaches \p tp, with \p lock held
++    //! on entry and return. Like std::condition_variable, it may also return
++    //! spuriously.
++    void wait_until(std::unique_lock<std::mutex> *lock, clock::time_point tp);
++
++    //! Waits until notified, with \p lock held on entry and return. It may
++    //! also return spuriously.
++    void wait(std::unique_lock<std::mutex> *lock);
++
++    void notify_all();
++
++   private:
++    std::condition_variable cv;
++  };
++
 +  virtual ~ClockIface() { }
 +
 +  virtual clock::time_point now() const = 0;
-+
-+  //! Waits on \p cv, which \p lock must be held for, until \p cv is notified
-+  //! or now() reaches \p tp. Like std::condition_variable::wait_until, it may
-+  //! also return spuriously.
-+  virtual void wait_until(std::unique_lock<std::mutex> *lock,
-+                          std::condition_variable *cv,
-+                          clock::time_point tp) = 0;
 +
 +  //! The installed clock, the system clock by default.
 +  static ClockIface *get();
@@ -64,6 +76,15 @@ index 00000000..40ca2548
 +  //! Installs \p clock, which must outlive its installation; nullptr
 +  //! reinstalls the system clock.
 +  static void set(ClockIface *clock);
++
++ protected:
++  //! See Condvar.
++  virtual void wait_until(std::unique_lock<std::mutex> *lock,
++                          std::condition_variable *cv,
++                          clock::time_point tp) = 0;
++  virtual void wait(std::unique_lock<std::mutex> *lock,
++                    std::condition_variable *cv) = 0;
++  virtual void notify_all(std::condition_variable *cv) = 0;
 +};
 +
 +}  // namespace bm
@@ -104,7 +125,7 @@ index 62a48cf0..60aac26f 100644
    using buffer_state_t = PacketBuffer::state_t;
  
 diff --git a/include/bm/bm_sim/periodic_task.h b/include/bm/bm_sim/periodic_task.h
-index 88a04c74..b38e64d0 100644
+index 88a04c74..b997f816 100644
 --- a/include/bm/bm_sim/periodic_task.h
 +++ b/include/bm/bm_sim/periodic_task.h
 @@ -18,6 +18,8 @@
@@ -125,6 +146,15 @@ index 88a04c74..b38e64d0 100644
  };
  
  //! Singleton which stores and executes periodic tasks.
+@@ -114,7 +116,7 @@ class PeriodicTaskList {
+   std::thread periodic_thread;
+   bool running;
+   mutable std::mutex queue_mutex;
+-  mutable std::condition_variable cv;
++  mutable ClockIface::Condvar cv;
+ };
+ 
+ }  // namespace bm
 diff --git a/src/bm_sim/CMakeLists.txt b/src/bm_sim/CMakeLists.txt
 index 9d012356..1bb61496 100644
 --- a/src/bm_sim/CMakeLists.txt
@@ -150,7 +180,7 @@ index c658dc0c..bdbe1993 100644
  context.cpp \
  control_action.cpp \
 diff --git a/src/bm_sim/ageing.cpp b/src/bm_sim/ageing.cpp
-index 94b9b8bd..7d699028 100644
+index 94b9b8bd..4b3a2e74 100644
 --- a/src/bm_sim/ageing.cpp
 +++ b/src/bm_sim/ageing.cpp
 @@ -9,6 +9,7 @@
@@ -169,7 +199,23 @@ index 94b9b8bd..7d699028 100644
  
    AgeingMonitor(device_id_t device_id, cxt_id_t cxt_id,
                  std::shared_ptr<TransportIface> writer,
-@@ -108,6 +108,7 @@ AgeingMonitor::~AgeingMonitor() {
+@@ -86,7 +86,7 @@ class AgeingMonitor final : public AgeingMonitorIface {
+ 
+   std::thread sweep_thread{};
+   bool stop_sweep_thread{false};
+-  mutable std::condition_variable stop_condvar{};
++  mutable ClockIface::Condvar stop_condvar{};
+ };
+ 
+ AgeingMonitor::AgeingMonitor(device_id_t device_id, cxt_id_t cxt_id,
+@@ -102,12 +102,13 @@ AgeingMonitor::~AgeingMonitor() {
+     std::unique_lock<std::mutex> lock(mutex);
+     stop_sweep_thread = true;
+   }
+-  stop_condvar.notify_one();
++  stop_condvar.notify_all();
+   sweep_thread.join();
+ }
  
  void
  AgeingMonitor::add_table(MatchTableAbstract *table) {
@@ -191,16 +237,16 @@ index 94b9b8bd..7d699028 100644
      tp += interval;
 -    stop_condvar.wait_until(lock, tp);
 +    while (!stop_sweep_thread && time_base->now() < tp)
-+      time_base->wait_until(&lock, &stop_condvar, tp);
++      stop_condvar.wait_until(&lock, tp);
    }
  }
  
 diff --git a/src/bm_sim/clock.cpp b/src/bm_sim/clock.cpp
 new file mode 100644
-index 00000000..eaf85285
+index 00000000..e4e9c29e
 --- /dev/null
 +++ b/src/bm_sim/clock.cpp
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,67 @@
 +// SPDX-FileCopyrightText: 2026 Bryan Richter
 +//
 +// SPDX-License-Identifier: Apache-2.0
@@ -224,6 +270,15 @@ index 00000000..eaf85285
 +                  clock::time_point tp) override {
 +    cv->wait_until(*lock, tp);
 +  }
++
++  void wait(std::unique_lock<std::mutex> *lock,
++            std::condition_variable *cv) override {
++    cv->wait(*lock);
++  }
++
++  void notify_all(std::condition_variable *cv) override {
++    cv->notify_all();
++  }
 +};
 +
 +SystemClock system_clock;
@@ -240,6 +295,22 @@ index 00000000..eaf85285
 +void
 +ClockIface::set(ClockIface *clock) {
 +  installed_clock.store(clock ? clock : &system_clock);
++}
++
++void
++ClockIface::Condvar::wait_until(std::unique_lock<std::mutex> *lock,
++                                clock::time_point tp) {
++  get()->wait_until(lock, &cv, tp);
++}
++
++void
++ClockIface::Condvar::wait(std::unique_lock<std::mutex> *lock) {
++  get()->wait(lock, &cv);
++}
++
++void
++ClockIface::Condvar::notify_all() {
++  get()->notify_all(&cv);
 +}
 +
 +}  // namespace bm
@@ -308,7 +379,7 @@ index fe7c26f6..0f1a94c0 100644
      ingress_ts.time_since_epoch()).count();
  }
 diff --git a/src/bm_sim/periodic_task.cpp b/src/bm_sim/periodic_task.cpp
-index 035d2c33..769c1dab 100644
+index 035d2c33..a395db2c 100644
 --- a/src/bm_sim/periodic_task.cpp
 +++ b/src/bm_sim/periodic_task.cpp
 @@ -15,7 +15,7 @@ PeriodicTask::PeriodicTask(
@@ -329,8 +400,12 @@ index 035d2c33..769c1dab 100644
  }
  
  void
-@@ -130,15 +130,15 @@ PeriodicTaskList::loop() {
-       cv.wait(lk);
+@@ -127,18 +127,18 @@ PeriodicTaskList::loop() {
+       break;
+     }
+     if (task_queue.empty()) {
+-      cv.wait(lk);
++      cv.wait(&lk);
        continue;
      }
 -    std::chrono::system_clock::time_point& next = task_queue.top()->next;
@@ -344,7 +419,7 @@ index 035d2c33..769c1dab 100644
 +    ClockIface *time_base = ClockIface::get();
 +    auto task = task_queue.top();
 +    if (time_base->now() < task->next) {
-+      time_base->wait_until(&lk, &cv, task->next);
++      cv.wait_until(&lk, task->next);
 +      continue;
      }
 +    task_queue.pop();
@@ -353,6 +428,54 @@ index 035d2c33..769c1dab 100644
    }
  }
  
+diff --git a/tests/CMakeLists.txt b/tests/CMakeLists.txt
+index bee0dcda..ca3288ea 100644
+--- a/tests/CMakeLists.txt
++++ b/tests/CMakeLists.txt
+@@ -52,6 +52,7 @@ set(TESTS
+   test_bm_apps
+   test_calculations
+   test_checksums
++  test_clock
+   test_conditionals
+   test_control_flow
+   test_core_primitives
+@@ -118,6 +119,7 @@ add_executable(test_all
+   test_bm_apps.cpp
+   test_calculations.cpp
+   test_checksums.cpp
++  test_clock.cpp
+   test_conditionals.cpp
+   test_control_flow.cpp
+   test_core_primitives.cpp
+diff --git a/tests/Makefile.am b/tests/Makefile.am
+index 369cdf15..df8eec68 100644
+--- a/tests/Makefile.am
++++ b/tests/Makefile.am
+@@ -40,6 +40,7 @@ $(builddir)/libtestutils.la \
+ common_source = main.cpp bmi_stubs.c primitives.cpp
+ TESTS = test_actions \
+ test_checksums \
++test_clock \
+ test_expressions \
+ test_conditionals \
+ test_data \
+@@ -82,6 +83,7 @@ check_PROGRAMS = $(TESTS) test_all
+ # Sources for tests
+ test_actions_SOURCES         = $(common_source) test_actions.cpp
+ test_checksums_SOURCES       = $(common_source) test_checksums.cpp
++test_clock_SOURCES           = $(common_source) test_clock.cpp
+ test_expressions_SOURCES     = $(common_source) test_expressions.cpp
+ test_conditionals_SOURCES    = $(common_source) test_conditionals.cpp
+ test_data_SOURCES            = $(common_source) test_data.cpp
+@@ -122,6 +124,7 @@ test_ras_SOURCES             = $(common_source) test_ras.cpp
+ test_all_SOURCES = $(common_source) \
+ test_actions.cpp \
+ test_checksums.cpp \
++test_clock.cpp \
+ test_expressions.cpp \
+ test_conditionals.cpp \
+ test_data.cpp \
 diff --git a/tests/test_ageing.cpp b/tests/test_ageing.cpp
 index 064129c9..03112746 100644
 --- a/tests/test_ageing.cpp
@@ -502,8 +625,65 @@ index 064129c9..03112746 100644
    }
  }
  
+diff --git a/tests/test_clock.cpp b/tests/test_clock.cpp
+new file mode 100644
+index 00000000..b7fde43f
+--- /dev/null
++++ b/tests/test_clock.cpp
+@@ -0,0 +1,51 @@
++// SPDX-FileCopyrightText: 2026 Bryan Richter
++//
++// SPDX-License-Identifier: Apache-2.0
++
++#include <gtest/gtest.h>
++
++#include <bm/bm_sim/clock.h>
++
++#include <chrono>
++#include <mutex>
++#include <thread>
++
++#include "utils.h"
++
++using bm::ClockIface;
++
++// A thread woken through its Condvar is not idle until it waits again
++TEST(ManualClock, NotifiedWaiterIsNotIdle) {
++  ManualClock manual_clock;
++  std::mutex mutex;
++  ClockIface::Condvar condvar;
++  int wakeups = 0;
++  bool stop = false;
++
++  std::thread waiter([&] {
++    std::unique_lock<std::mutex> lock(mutex);
++    int seen = 0;
++    while (!stop) {
++      while (wakeups == seen && !stop) condvar.wait(&lock);
++      seen = wakeups;
++    }
++  });
++  ASSERT_TRUE(manual_clock.wait_until_idle(1));
++
++  {
++    std::unique_lock<std::mutex> lock(mutex);
++    wakeups++;
++    condvar.notify_all();
++    // Holding the mutex keeps the woken thread from waiting again.
++    EXPECT_FALSE(manual_clock.wait_until_idle(1,
++                                              std::chrono::milliseconds(100)));
++  }
++  EXPECT_TRUE(manual_clock.wait_until_idle(1));
++
++  {
++    std::unique_lock<std::mutex> lock(mutex);
++    stop = true;
++    condvar.notify_all();
++  }
++  waiter.join();
++}
 diff --git a/tests/test_periodic_tasks.cpp b/tests/test_periodic_tasks.cpp
-index 6eea9009..0f3a0dea 100644
+index 6eea9009..46076bce 100644
 --- a/tests/test_periodic_tasks.cpp
 +++ b/tests/test_periodic_tasks.cpp
 @@ -9,6 +9,9 @@
@@ -516,7 +696,7 @@ index 6eea9009..0f3a0dea 100644
  
  using namespace bm;
  
-@@ -28,71 +31,94 @@ class PeriodicIncrementor {
+@@ -28,71 +31,86 @@ class PeriodicIncrementor {
    PeriodicTask increment_task;
  };
  
@@ -564,12 +744,12 @@ index 6eea9009..0f3a0dea 100644
 -  std::this_thread::sleep_for(kSleepTime);
 -  PeriodicTaskList::get_instance().join();
 +  wait_for_tasks();
-+
-+  EXPECT_EQ(i, 1);
  
 -  // One more or one less execution is o.k.
 -  EXPECT_GE(i, kPeriods - 1);
 -  EXPECT_LE(i, kPeriods + 1);
++  EXPECT_EQ(i, 1);
++
 +  advance(kInterval, kPeriods);
 +
 +  EXPECT_EQ(i, kPeriods + 1);
@@ -596,11 +776,7 @@ index 6eea9009..0f3a0dea 100644
 -TEST(PeriodicExtern, Unregistration) {
 +TEST_F(PeriodicExtern, Unregistration) {
    int i = 0;
-+  int witness_runs = 0;
    PeriodicTaskList::get_instance().start();
-+  // Due whenever the unregistered task would be, so its runs show the loop
-+  // got past those deadlines.
-+  PeriodicIncrementor witness(kInterval, &witness_runs);
    {
      PeriodicIncrementor incrementor(kInterval, &i);
 -    std::this_thread::sleep_for(kSleepTime);
@@ -612,7 +788,6 @@ index 6eea9009..0f3a0dea 100644
 -  EXPECT_GE(i, kPeriods - 1);
 -  EXPECT_LE(i, kPeriods + 1);
 +  EXPECT_EQ(i, kPeriods);
-+  EXPECT_EQ(witness_runs, 2 * kPeriods);
  }
  
  // Two tasks will be scheduled correctly
@@ -621,17 +796,13 @@ index 6eea9009..0f3a0dea 100644
    int i = 0;
    int j = 0;
 -  std::chrono::milliseconds interval_2{kSleepTimeMs / (kPeriods * 2)};
--  PeriodicTaskList::get_instance().start();
+   PeriodicTaskList::get_instance().start();
    {
 -      PeriodicIncrementor incrementor_1(kInterval, &i);
 -      PeriodicIncrementor incrementor_2(interval_2, &j);
 -      std::this_thread::sleep_for(kSleepTime);
 +    PeriodicIncrementor incrementor_1(kInterval, &i);
-+    // Registered before start so that registering it cannot move the loop's
-+    // earliest deadline; see ManualClock::wait_until_idle.
 +    PeriodicIncrementor incrementor_2(kInterval / 2, &j);
-+    PeriodicTaskList::get_instance().start();
-+    wait_for_tasks();
 +    advance(kInterval / 2, 2 * kPeriods);
    }
  
@@ -643,7 +814,7 @@ index 6eea9009..0f3a0dea 100644
 +  EXPECT_EQ(j, 2 * kPeriods);
  }
 diff --git a/tests/utils.h b/tests/utils.h
-index cf407bdd..0c53f709 100644
+index cf407bdd..5612e9fe 100644
 --- a/tests/utils.h
 +++ b/tests/utils.h
 @@ -13,9 +13,11 @@
@@ -659,7 +830,7 @@ index cf407bdd..0c53f709 100644
  #include <condition_variable>
  #include <memory>
  #include <mutex>
-@@ -111,6 +113,86 @@ class MemoryAccessor : public bm::TransportIface {
+@@ -111,6 +113,102 @@ class MemoryAccessor : public bm::TransportIface {
    mutable std::condition_variable can_read;
  };
  
@@ -680,24 +851,6 @@ index cf407bdd..0c53f709 100644
 +    return now_;
 +  }
 +
-+  void wait_until(std::unique_lock<std::mutex> *lock,
-+                  std::condition_variable *cv,
-+                  clock::time_point tp) override {
-+    Waiter waiter{lock->mutex(), cv, tp};
-+    {
-+      std::unique_lock<std::mutex> clock_lock(mutex);
-+      if (now_ >= tp) return;
-+      waiters.push_back(&waiter);
-+    }
-+    waiters_changed.notify_all();
-+    cv->wait(*lock);
-+    {
-+      std::unique_lock<std::mutex> clock_lock(mutex);
-+      waiters.erase(std::find(waiters.begin(), waiters.end(), &waiter));
-+    }
-+    waiters_changed.notify_all();
-+  }
-+
 +  // Wakes the waiters whose deadline the new time reaches. Their mutexes and
 +  // condition variables must stay alive until this returns.
 +  void advance(clock::duration d) {
@@ -716,9 +869,7 @@ index cf407bdd..0c53f709 100644
 +  }
 +
 +  // Blocks until num_threads threads wait on this clock and none is due, i.e.
-+  // they have done all their work up to now(). False on timeout. A thread
-+  // woken through its condition variable counts as waiting until it runs, so
-+  // such a wakeup must not bring a due deadline.
++  // they have done all their work up to now(). False on timeout.
 +  bool wait_until_idle(size_t num_threads,
 +                       std::chrono::milliseconds timeout =
 +                           std::chrono::seconds(10)) {
@@ -728,6 +879,42 @@ index cf407bdd..0c53f709 100644
 +          std::all_of(waiters.begin(), waiters.end(),
 +                      [this](const Waiter *w) { return w->deadline > now_; });
 +    });
++  }
++
++ protected:
++  void wait_until(std::unique_lock<std::mutex> *lock,
++                  std::condition_variable *cv,
++                  clock::time_point tp) override {
++    Waiter waiter{lock->mutex(), cv, tp};
++    {
++      std::unique_lock<std::mutex> clock_lock(mutex);
++      if (now_ >= tp) return;
++      waiters.push_back(&waiter);
++    }
++    waiters_changed.notify_all();
++    cv->wait(*lock);
++    {
++      std::unique_lock<std::mutex> clock_lock(mutex);
++      auto it = std::find(waiters.begin(), waiters.end(), &waiter);
++      if (it != waiters.end()) waiters.erase(it);
++    }
++    waiters_changed.notify_all();
++  }
++
++  void wait(std::unique_lock<std::mutex> *lock,
++            std::condition_variable *cv) override {
++    wait_until(lock, cv, clock::time_point::max());
++  }
++
++  // The woken threads stop counting as waiting before they can run.
++  void notify_all(std::condition_variable *cv) override {
++    {
++      std::unique_lock<std::mutex> clock_lock(mutex);
++      auto woken = [cv](const Waiter *w) { return w->cv == cv; };
++      waiters.erase(std::remove_if(waiters.begin(), waiters.end(), woken),
++                    waiters.end());
++    }
++    cv->notify_all();
 +  }
 +
 + private:

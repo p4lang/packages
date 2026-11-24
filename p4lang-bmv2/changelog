@@ -1,3 +1,9 @@
+p4lang-bmv2 (1.15.8-4) unstable; urgency=medium
+
+  * Refresh the backport of p4lang/behavioral-model#1477
+
+ -- Bryan Richter <b@chreekat.net>  Tue, 24 Nov 2026 14:08:40 +0200
+
 p4lang-bmv2 (1.15.8-3) unstable; urgency=medium
 
   * Backport p4lang/behavioral-model#1477: drive the ageing and periodic
