@@ -1,0 +1,748 @@
+Description: Drive the ageing and periodic task tests with a manual clock
+ The tests slept on the real clock and counted what ran meanwhile, which
+ loaded builders miss: AgeingTest.OneNotification on OBS Debian 12 aarch64,
+ PeriodicExtern.MultipleTasks on Debian 13 aarch64. Ageing, packet timestamps
+ and periodic tasks now take time from a replaceable process clock, which the
+ tests advance by hand.
+Author: Bryan Richter <b@chreekat.net>
+Forwarded: https://github.com/p4lang/behavioral-model/pull/1477
+diff --git a/include/Makefile.am b/include/Makefile.am
+index 788ede9a..5759b1ec 100644
+--- a/include/Makefile.am
++++ b/include/Makefile.am
+@@ -38,6 +38,7 @@ bm/bm_sim/bytecontainer.h \
+ bm/bm_sim/calculations.h \
+ bm/bm_sim/control_action.h \
+ bm/bm_sim/checksums.h \
++bm/bm_sim/clock.h \
+ bm/bm_sim/conditionals.h \
+ bm/bm_sim/context.h \
+ bm/bm_sim/control_flow.h \
+diff --git a/include/bm/bm_sim/clock.h b/include/bm/bm_sim/clock.h
+new file mode 100644
+index 00000000..40ca2548
+--- /dev/null
++++ b/include/bm/bm_sim/clock.h
+@@ -0,0 +1,45 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Bryan Richter
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++//! @file clock.h
++
++#ifndef BM_BM_SIM_CLOCK_H_
++#define BM_BM_SIM_CLOCK_H_
++
++#include <chrono>
++#include <condition_variable>
++#include <mutex>
++
++namespace bm {
++
++//! The time base of packet ingress timestamps, match entry ageing and periodic
++//! tasks. One instance serves the whole process; see get() and set().
++class ClockIface {
++ public:
++  using clock = std::chrono::system_clock;
++
++  virtual ~ClockIface() { }
++
++  virtual clock::time_point now() const = 0;
++
++  //! Waits on \p cv, which \p lock must be held for, until \p cv is notified
++  //! or now() reaches \p tp. Like std::condition_variable::wait_until, it may
++  //! also return spuriously.
++  virtual void wait_until(std::unique_lock<std::mutex> *lock,
++                          std::condition_variable *cv,
++                          clock::time_point tp) = 0;
++
++  //! The installed clock, the system clock by default.
++  static ClockIface *get();
++
++  //! Installs \p clock, which must outlive its installation; nullptr
++  //! reinstalls the system clock.
++  static void set(ClockIface *clock);
++};
++
++}  // namespace bm
++
++#endif  // BM_BM_SIM_CLOCK_H_
+diff --git a/include/bm/bm_sim/match_units.h b/include/bm/bm_sim/match_units.h
+index 6772f74c..7a58ae46 100644
+--- a/include/bm/bm_sim/match_units.h
++++ b/include/bm/bm_sim/match_units.h
+@@ -212,7 +212,7 @@ struct EntryMeta {
+ 
+   void reset() {
+     counter.reset_counter();
+-    ts.set(clock::now());
++    ts.set(ClockIface::get()->now());
+   }
+ };
+ 
+diff --git a/include/bm/bm_sim/packet.h b/include/bm/bm_sim/packet.h
+index 62a48cf0..60aac26f 100644
+--- a/include/bm/bm_sim/packet.h
++++ b/include/bm/bm_sim/packet.h
+@@ -28,6 +28,7 @@
+ #include <string>
+ #include <vector>
+ 
++#include "clock.h"
+ #include "device_id.h"
+ #include "packet_buffer.h"
+ #include "parser_error.h"
+@@ -97,7 +98,7 @@ class Packet final {
+   friend class Switch;
+ 
+  public:
+-  using clock = std::chrono::system_clock;
++  using clock = ClockIface::clock;
+ 
+   using buffer_state_t = PacketBuffer::state_t;
+ 
+diff --git a/include/bm/bm_sim/periodic_task.h b/include/bm/bm_sim/periodic_task.h
+index 88a04c74..b38e64d0 100644
+--- a/include/bm/bm_sim/periodic_task.h
++++ b/include/bm/bm_sim/periodic_task.h
+@@ -18,6 +18,8 @@
+ #include <condition_variable>
+ #include <mutex>
+ 
++#include "clock.h"
++
+ namespace bm {
+ 
+ //! Initializes and registers a task that is to be executed periodically
+@@ -73,7 +75,7 @@ class PeriodicTask {
+   void cancel();
+ 
+   const std::function<void()> fn;
+-  std::chrono::system_clock::time_point next;
++  ClockIface::clock::time_point next;
+ };
+ 
+ //! Singleton which stores and executes periodic tasks.
+diff --git a/src/bm_sim/CMakeLists.txt b/src/bm_sim/CMakeLists.txt
+index 9d012356..1bb61496 100644
+--- a/src/bm_sim/CMakeLists.txt
++++ b/src/bm_sim/CMakeLists.txt
+@@ -18,6 +18,7 @@ add_library(bmsim OBJECT
+   bytecontainer.cpp
+   calculations.cpp
+   checksums.cpp
++  clock.cpp
+   conditionals.cpp
+   context.cpp
+   control_action.cpp
+diff --git a/src/bm_sim/Makefile.am b/src/bm_sim/Makefile.am
+index c658dc0c..bdbe1993 100644
+--- a/src/bm_sim/Makefile.am
++++ b/src/bm_sim/Makefile.am
+@@ -24,6 +24,7 @@ ageing.cpp \
+ bytecontainer.cpp \
+ calculations.cpp \
+ checksums.cpp \
++clock.cpp \
+ conditionals.cpp \
+ context.cpp \
+ control_action.cpp \
+diff --git a/src/bm_sim/ageing.cpp b/src/bm_sim/ageing.cpp
+index 94b9b8bd..7d699028 100644
+--- a/src/bm_sim/ageing.cpp
++++ b/src/bm_sim/ageing.cpp
+@@ -9,6 +9,7 @@
+  */
+ 
+ #include <bm/bm_sim/ageing.h>
++#include <bm/bm_sim/clock.h>
+ #include <bm/bm_sim/match_tables.h>
+ #include <bm/bm_sim/packet.h>
+ #include <bm/bm_sim/logger.h>
+@@ -31,7 +32,6 @@ class AgeingMonitor final : public AgeingMonitorIface {
+  public:
+   using msg_hdr_t = AgeingMonitorIface::msg_hdr_t;
+   using buffer_id_t = uint64_t;
+-  using clock = Packet::clock;
+ 
+   AgeingMonitor(device_id_t device_id, cxt_id_t cxt_id,
+                 std::shared_ptr<TransportIface> writer,
+@@ -108,6 +108,7 @@ AgeingMonitor::~AgeingMonitor() {
+ 
+ void
+ AgeingMonitor::add_table(MatchTableAbstract *table) {
++  std::unique_lock<std::mutex> lock(mutex);
+   tables_with_ageing.insert(std::make_pair(table->get_id(), TableData(table)));
+ }
+ 
+@@ -146,13 +147,15 @@ AgeingMonitor::get_table_name_from_id(p4object_id_t id) const {
+ void
+ AgeingMonitor::sweep_loop() {
+   using std::chrono::milliseconds;
+-  auto tp = clock::now();
++  ClockIface *time_base = ClockIface::get();
++  auto tp = time_base->now();
+   std::unique_lock<std::mutex> lock(mutex);
+   while (!stop_sweep_thread) {
+     do_sweep();
+     milliseconds interval(sweep_interval_ms);
+     tp += interval;
+-    stop_condvar.wait_until(lock, tp);
++    while (!stop_sweep_thread && time_base->now() < tp)
++      time_base->wait_until(&lock, &stop_condvar, tp);
+   }
+ }
+ 
+diff --git a/src/bm_sim/clock.cpp b/src/bm_sim/clock.cpp
+new file mode 100644
+index 00000000..eaf85285
+--- /dev/null
++++ b/src/bm_sim/clock.cpp
+@@ -0,0 +1,42 @@
++// SPDX-FileCopyrightText: 2026 Bryan Richter
++//
++// SPDX-License-Identifier: Apache-2.0
++
++#include <bm/bm_sim/clock.h>
++
++#include <atomic>
++
++namespace bm {
++
++namespace {
++
++class SystemClock final : public ClockIface {
++ public:
++  clock::time_point now() const override {
++    return clock::now();
++  }
++
++  void wait_until(std::unique_lock<std::mutex> *lock,
++                  std::condition_variable *cv,
++                  clock::time_point tp) override {
++    cv->wait_until(*lock, tp);
++  }
++};
++
++SystemClock system_clock;
++
++std::atomic<ClockIface *> installed_clock{&system_clock};
++
++}  // namespace
++
++ClockIface *
++ClockIface::get() {
++  return installed_clock.load();
++}
++
++void
++ClockIface::set(ClockIface *clock) {
++  installed_clock.store(clock ? clock : &system_clock);
++}
++
++}  // namespace bm
+diff --git a/src/bm_sim/match_tables.cpp b/src/bm_sim/match_tables.cpp
+index 27a84269..d0a169d7 100644
+--- a/src/bm_sim/match_tables.cpp
++++ b/src/bm_sim/match_tables.cpp
+@@ -9,6 +9,7 @@
+  */
+ 
+ #include <bm/bm_sim/_assert.h>
++#include <bm/bm_sim/clock.h>
+ #include <bm/bm_sim/match_tables.h>
+ #include <bm/bm_sim/logger.h>
+ #include <bm/bm_sim/event_logger.h>
+@@ -333,7 +334,7 @@ MatchTableAbstract::set_entry_common_info(EntryCommon *entry) const {
+   using std::chrono::milliseconds;
+   // when retrieving many entries, the clock is read many times; but this is the
+   // most readable solution IMO
+-  auto tp = Packet::clock::now();
++  auto tp = ClockIface::get()->now();
+   auto now_ms = duration_cast<milliseconds>(tp.time_since_epoch()).count();
+   MatchUnit::EntryMeta &meta = match_unit_->get_entry_meta(entry->handle);
+   entry->timeout_ms = meta.timeout_ms;
+diff --git a/src/bm_sim/match_units.cpp b/src/bm_sim/match_units.cpp
+index 25b49f2a..9e356e47 100644
+--- a/src/bm_sim/match_units.cpp
++++ b/src/bm_sim/match_units.cpp
+@@ -11,6 +11,7 @@
+ #include <bm/bm_sim/_assert.h>
+ #include <bm/bm_sim/action_entry.h>
+ #include <bm/bm_sim/action_profile.h>
++#include <bm/bm_sim/clock.h>
+ #include <bm/bm_sim/match_units.h>
+ #include <bm/bm_sim/match_key_types.h>
+ #include <bm/bm_sim/logger.h>
+@@ -711,7 +712,7 @@ MatchUnitAbstract_::set_entry_ttl(entry_handle_t handle, unsigned int ttl_ms) {
+   meta.timeout_ms = ttl_ms;
+   // reset timestamp so that entries are not aged right away even if they have
+   // not been hit in a while (i.e. timeout starts now)
+-  meta.ts.set(Packet::clock::now());
++  meta.ts.set(ClockIface::get()->now());
+   return MatchErrorCode::SUCCESS;
+ }
+ 
+@@ -720,7 +721,7 @@ MatchUnitAbstract_::sweep_entries(std::vector<entry_handle_t> *entries) const {
+   using std::chrono::duration_cast;
+   using std::chrono::milliseconds;
+ 
+-  auto tp = Packet::clock::now();
++  auto tp = ClockIface::get()->now();
+   uint64_t now_ms = duration_cast<milliseconds>(tp.time_since_epoch()).count();
+   for (auto it = handles.begin(); it != handles.end(); ++it) {
+     const EntryMeta &meta = entry_meta[*it];
+diff --git a/src/bm_sim/packet.cpp b/src/bm_sim/packet.cpp
+index fe7c26f6..0f1a94c0 100644
+--- a/src/bm_sim/packet.cpp
++++ b/src/bm_sim/packet.cpp
+@@ -74,7 +74,7 @@ Packet::update_signature(uint64_t seed) {
+ 
+ void
+ Packet::set_ingress_ts() {
+-  ingress_ts = clock::now();
++  ingress_ts = ClockIface::get()->now();
+   ingress_ts_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+     ingress_ts.time_since_epoch()).count();
+ }
+diff --git a/src/bm_sim/periodic_task.cpp b/src/bm_sim/periodic_task.cpp
+index 035d2c33..769c1dab 100644
+--- a/src/bm_sim/periodic_task.cpp
++++ b/src/bm_sim/periodic_task.cpp
+@@ -15,7 +15,7 @@ PeriodicTask::PeriodicTask(
+     const std::string &name, std::function<void()> fn,
+     std::chrono::milliseconds interval)
+     : name(name), interval(interval), fn(fn),
+-      next(std::chrono::system_clock::now() + interval) {
++      next(ClockIface::get()->now() + interval) {
+   PeriodicTaskList::get_instance().register_task(this);
+ }
+ 
+@@ -31,7 +31,7 @@ PeriodicTask::cancel() {
+ 
+ void
+ PeriodicTask::reset_next() {
+-  next = std::chrono::system_clock::now() + interval;
++  next = ClockIface::get()->now() + interval;
+ }
+ 
+ void
+@@ -130,15 +130,15 @@ PeriodicTaskList::loop() {
+       cv.wait(lk);
+       continue;
+     }
+-    std::chrono::system_clock::time_point& next = task_queue.top()->next;
+-    if (cv.wait_until(lk, next) == std::cv_status::timeout) {
+-      if (!task_queue.empty()) {
+-        auto task = task_queue.top();
+-        task_queue.pop();
+-        task->execute();
+-        task_queue.push(task);
+-      }
++    ClockIface *time_base = ClockIface::get();
++    auto task = task_queue.top();
++    if (time_base->now() < task->next) {
++      time_base->wait_until(&lk, &cv, task->next);
++      continue;
+     }
++    task_queue.pop();
++    task->execute();
++    task_queue.push(task);
+   }
+ }
+ 
+diff --git a/tests/test_ageing.cpp b/tests/test_ageing.cpp
+index 064129c9..03112746 100644
+--- a/tests/test_ageing.cpp
++++ b/tests/test_ageing.cpp
+@@ -13,12 +13,10 @@
+ #include <bm/bm_sim/ageing.h>
+ #include <bm/bm_sim/match_tables.h>
+ 
++#include <chrono>
+ #include <memory>
++#include <stdexcept>
+ #include <string>
+-#include <mutex>
+-#include <thread>
+-#include <condition_variable>
+-#include <chrono>
+ #include <vector>
+ 
+ #include <cassert>
+@@ -28,15 +26,13 @@
+ using namespace bm;
+ 
+ using std::chrono::milliseconds;
+-using std::chrono::duration_cast;
+-using std::this_thread::sleep_for;
+ 
+-// Google Test fixture for learning tests
++// Google Test fixture for ageing tests
+ class AgeingTest : public ::testing::Test {
+  protected:
+-  using clock = std::chrono::high_resolution_clock;
++  // declared first so that it outlives the sweep thread
++  ManualClock manual_clock;
+ 
+- protected:
+   PHVFactory phv_factory;
+ 
+   const device_id_t device_id = 0;
+@@ -54,8 +50,6 @@ class AgeingTest : public ::testing::Test {
+ 
+   std::unique_ptr<AgeingMonitorIface> ageing_monitor;
+ 
+-  clock::time_point start;
+-
+   std::unique_ptr<PHVSourceIface> phv_source{nullptr};
+ 
+   AgeingTest()
+@@ -84,7 +78,6 @@ class AgeingTest : public ::testing::Test {
+ 
+   virtual void SetUp() {
+     phv_source->set_phv_factory(0, &phv_factory);
+-    start = clock::now();
+   }
+ 
+   // virtual void TearDown() { }
+@@ -131,6 +124,18 @@ class AgeingTest : public ::testing::Test {
+     ageing_monitor = AgeingMonitorIface::make(
+         device_id, cxt_id, ageing_writer, sweep_int);
+     ageing_monitor->add_table(table.get());
++    wait_for_sweeps();
++  }
++
++  // Moves the clock forward and waits for the sweeps due by then to complete.
++  void advance(unsigned int ms) {
++    manual_clock.advance(milliseconds(ms));
++    wait_for_sweeps();
++  }
++
++  void wait_for_sweeps() {
++    if (!manual_clock.wait_until_idle(1))
++      throw std::runtime_error("sweep thread did not go idle");
+   }
+ };
+ 
+@@ -139,52 +144,45 @@ TEST_F(AgeingTest, OneNotification) {
+   std::string key("0x0aba");
+   entry_handle_t handle_1;
+   entry_handle_t lookup_handle;
+-  unsigned int sweep_int = 200u;  // use it as timeout too
++  const unsigned int sweep_int = 100u;
++  const unsigned int ttl = 250u;
+   init_monitor(sweep_int);
+-  ASSERT_EQ(MatchErrorCode::SUCCESS, add_entry(key_, &handle_1, sweep_int));
+-  ASSERT_NE(MemoryAccessor::Status::CAN_READ, ageing_writer->check_status());
+-  sleep_for(milliseconds(150));
++  ASSERT_EQ(MatchErrorCode::SUCCESS, add_entry(key_, &handle_1, ttl));
++
++  advance(2 * sweep_int);
+   ASSERT_NE(MemoryAccessor::Status::CAN_READ, ageing_writer->check_status());
+ 
+-  auto tp1 = clock::now();
++  // a hit restarts the TTL: at t = 400 the entry was last hit at t = 200
+   ASSERT_TRUE(send_pkt(key, &lookup_handle));
+-  ageing_writer->read(buffer, sizeof(buffer));
+-  auto tp2 = clock::now();
++  advance(2 * sweep_int);
++  ASSERT_NE(MemoryAccessor::Status::CAN_READ, ageing_writer->check_status());
+ 
+-  unsigned int elapsed = duration_cast<milliseconds>(tp2 - tp1).count();
+-  ASSERT_GT(elapsed, sweep_int - 20u);
+-  ASSERT_LT(elapsed, 2 * sweep_int + 20u);
++  advance(sweep_int);
++  ASSERT_EQ(MemoryAccessor::Status::CAN_READ, ageing_writer->check_status());
++  ageing_writer->read(buffer, sizeof(buffer));
+ 
+-  // delete and make sure we do not get a new notification
++  // a hit re-arms the notification, but deleting the entry cancels it
++  ASSERT_TRUE(send_pkt(key, &lookup_handle));
+   ASSERT_EQ(MatchErrorCode::SUCCESS, delete_entry(handle_1));
+-
+-  sleep_for(milliseconds(2 * sweep_int + 100u));
++  advance(5 * sweep_int);
+   ASSERT_NE(MemoryAccessor::Status::CAN_READ, ageing_writer->check_status());
+ }
+ 
+ TEST_F(AgeingTest, NoDuplicate) {
+   std::string key_("\x0a\xba");
+-  std::string key("0x0aba");
+   entry_handle_t handle_1;
+-  // Use a longer interval to give shared CI workers enough margin
+-  // against scheduling lag.
+-  unsigned int sweep_int = 500u;
++  const unsigned int sweep_int = 100u;
++  const unsigned int ttl = 150u;
+   init_monitor(sweep_int);
+-  auto tp1 = clock::now();
+-  ASSERT_EQ(MatchErrorCode::SUCCESS, add_entry(key_, &handle_1, sweep_int));
+-  ageing_writer->read(buffer, sizeof(buffer));
+-  auto tp2 = clock::now();
++  ASSERT_EQ(MatchErrorCode::SUCCESS, add_entry(key_, &handle_1, ttl));
+ 
+-  unsigned int elapsed = duration_cast<milliseconds>(tp2 - tp1).count();
+-  ASSERT_GT(elapsed, sweep_int / 2);
+-  ASSERT_LT(elapsed, 3 * sweep_int);
++  advance(2 * sweep_int);
++  ASSERT_EQ(MemoryAccessor::Status::CAN_READ, ageing_writer->check_status());
++  ageing_writer->read(buffer, sizeof(buffer));
+ 
+-  // Poll across multiple sweep windows to ensure no duplicate notifications
+-  // are generated.
+-  auto deadline = clock::now() + milliseconds(6 * sweep_int);
+-  while (clock::now() < deadline) {
++  for (int i = 0; i < 5; i++) {
++    advance(sweep_int);
+     ASSERT_NE(MemoryAccessor::Status::CAN_READ, ageing_writer->check_status());
+-    sleep_for(milliseconds(20));
+   }
+ }
+ 
+diff --git a/tests/test_periodic_tasks.cpp b/tests/test_periodic_tasks.cpp
+index 6eea9009..0f3a0dea 100644
+--- a/tests/test_periodic_tasks.cpp
++++ b/tests/test_periodic_tasks.cpp
+@@ -9,6 +9,9 @@
+ 
+ #include <chrono>
+ #include <functional>
++#include <stdexcept>
++
++#include "utils.h"
+ 
+ using namespace bm;
+ 
+@@ -28,71 +31,94 @@ class PeriodicIncrementor {
+   PeriodicTask increment_task;
+ };
+ 
+-static constexpr int kSleepTimeMs = 500;
+ static constexpr int kPeriods = 5;
+ 
+-static constexpr std::chrono::milliseconds kInterval{kSleepTimeMs / kPeriods};
+-static constexpr std::chrono::milliseconds kSleepTime{kSleepTimeMs};
++static constexpr std::chrono::milliseconds kInterval{100};
++
++class PeriodicExtern : public ::testing::Test {
++ protected:
++  void TearDown() override {
++    PeriodicTaskList::get_instance().join();
++  }
++
++  // Moves the clock forward step by step, waiting each time for the tasks due
++  // by then to run.
++  void advance(std::chrono::milliseconds step, int steps) {
++    for (int k = 0; k < steps; k++) {
++      manual_clock.advance(step);
++      wait_for_tasks();
++    }
++  }
++
++  void wait_for_tasks() {
++    if (!manual_clock.wait_until_idle(1))
++      throw std::runtime_error("periodic thread did not go idle");
++  }
++
++  ManualClock manual_clock;
++};
+ 
+ // Tasks registered before the start of the thread execute on start
+-TEST(PeriodicExtern, PreStartRegistration) {
++TEST_F(PeriodicExtern, PreStartRegistration) {
+   int i = 0;
+   PeriodicIncrementor incrementor(kInterval, &i);
+-  std::this_thread::sleep_for(kSleepTime);
++  manual_clock.advance(kInterval * kPeriods);
+ 
+   EXPECT_EQ(i, 0);
+ 
+   PeriodicTaskList::get_instance().start();
+-  std::this_thread::sleep_for(kSleepTime);
+-  PeriodicTaskList::get_instance().join();
++  wait_for_tasks();
++
++  EXPECT_EQ(i, 1);
+ 
+-  // One more or one less execution is o.k.
+-  EXPECT_GE(i, kPeriods - 1);
+-  EXPECT_LE(i, kPeriods + 1);
++  advance(kInterval, kPeriods);
++
++  EXPECT_EQ(i, kPeriods + 1);
+ }
+ 
+ // Tasks registered after the start of the thread still execute
+-TEST(PeriodicExtern, PostStartRegistration) {
++TEST_F(PeriodicExtern, PostStartRegistration) {
+   int i = 0;
+   PeriodicTaskList::get_instance().start();
+ 
+   PeriodicIncrementor incrementor(kInterval, &i);
++  advance(kInterval, kPeriods);
+ 
+-  std::this_thread::sleep_for(kSleepTime);
+-  PeriodicTaskList::get_instance().join();
+-
+-  EXPECT_GE(i, kPeriods - 1);
+-  EXPECT_LE(i, kPeriods + 1);
++  EXPECT_EQ(i, kPeriods);
+ }
+ 
+ // Tasks stop executing when they go out of scope
+-TEST(PeriodicExtern, Unregistration) {
++TEST_F(PeriodicExtern, Unregistration) {
+   int i = 0;
++  int witness_runs = 0;
+   PeriodicTaskList::get_instance().start();
++  // Due whenever the unregistered task would be, so its runs show the loop
++  // got past those deadlines.
++  PeriodicIncrementor witness(kInterval, &witness_runs);
+   {
+     PeriodicIncrementor incrementor(kInterval, &i);
+-    std::this_thread::sleep_for(kSleepTime);
++    advance(kInterval, kPeriods);
+   }
+-  std::this_thread::sleep_for(kSleepTime);
++  advance(kInterval, kPeriods);
+ 
+-  EXPECT_GE(i, kPeriods - 1);
+-  EXPECT_LE(i, kPeriods + 1);
++  EXPECT_EQ(i, kPeriods);
++  EXPECT_EQ(witness_runs, 2 * kPeriods);
+ }
+ 
+ // Two tasks will be scheduled correctly
+-TEST(PeriodicExtern, MultipleTasks) {
++TEST_F(PeriodicExtern, MultipleTasks) {
+   int i = 0;
+   int j = 0;
+-  std::chrono::milliseconds interval_2{kSleepTimeMs / (kPeriods * 2)};
+-  PeriodicTaskList::get_instance().start();
+   {
+-      PeriodicIncrementor incrementor_1(kInterval, &i);
+-      PeriodicIncrementor incrementor_2(interval_2, &j);
+-      std::this_thread::sleep_for(kSleepTime);
++    PeriodicIncrementor incrementor_1(kInterval, &i);
++    // Registered before start so that registering it cannot move the loop's
++    // earliest deadline; see ManualClock::wait_until_idle.
++    PeriodicIncrementor incrementor_2(kInterval / 2, &j);
++    PeriodicTaskList::get_instance().start();
++    wait_for_tasks();
++    advance(kInterval / 2, 2 * kPeriods);
+   }
+ 
+-  EXPECT_GE(i, kPeriods - 1);
+-  EXPECT_LE(i, kPeriods + 1);
+-  EXPECT_GE(j, (kPeriods * 2) - 1);
+-  EXPECT_LE(j, (kPeriods * 2) + 1);
++  EXPECT_EQ(i, kPeriods);
++  EXPECT_EQ(j, 2 * kPeriods);
+ }
+diff --git a/tests/utils.h b/tests/utils.h
+index cf407bdd..0c53f709 100644
+--- a/tests/utils.h
++++ b/tests/utils.h
+@@ -13,9 +13,11 @@
+ #ifndef TESTS_UTILS_H_
+ #define TESTS_UTILS_H_
+ 
++#include <bm/bm_sim/clock.h>
+ #include <bm/bm_sim/transport.h>
+ 
+-#include <algorithm>  // for std::copy
++#include <algorithm>  // for std::copy, std::all_of
++#include <chrono>
+ #include <condition_variable>
+ #include <memory>
+ #include <mutex>
+@@ -111,6 +113,86 @@ class MemoryAccessor : public bm::TransportIface {
+   mutable std::condition_variable can_read;
+ };
+ 
++// A clock that only moves when advance() is called, installed as the process
++// clock for its lifetime.
++class ManualClock : public bm::ClockIface {
++ public:
++  ManualClock() {
++    bm::ClockIface::set(this);
++  }
++
++  ~ManualClock() {
++    bm::ClockIface::set(nullptr);
++  }
++
++  clock::time_point now() const override {
++    std::unique_lock<std::mutex> lock(mutex);
++    return now_;
++  }
++
++  void wait_until(std::unique_lock<std::mutex> *lock,
++                  std::condition_variable *cv,
++                  clock::time_point tp) override {
++    Waiter waiter{lock->mutex(), cv, tp};
++    {
++      std::unique_lock<std::mutex> clock_lock(mutex);
++      if (now_ >= tp) return;
++      waiters.push_back(&waiter);
++    }
++    waiters_changed.notify_all();
++    cv->wait(*lock);
++    {
++      std::unique_lock<std::mutex> clock_lock(mutex);
++      waiters.erase(std::find(waiters.begin(), waiters.end(), &waiter));
++    }
++    waiters_changed.notify_all();
++  }
++
++  // Wakes the waiters whose deadline the new time reaches. Their mutexes and
++  // condition variables must stay alive until this returns.
++  void advance(clock::duration d) {
++    std::vector<Waiter> due;
++    {
++      std::unique_lock<std::mutex> lock(mutex);
++      now_ += d;
++      for (const Waiter *waiter : waiters)
++        if (waiter->deadline <= now_) due.push_back(*waiter);
++    }
++    for (const Waiter &waiter : due) {
++      // A waiter holds its mutex until it is blocked on its condvar.
++      { std::unique_lock<std::mutex> lock(*waiter.mutex); }
++      waiter.cv->notify_all();
++    }
++  }
++
++  // Blocks until num_threads threads wait on this clock and none is due, i.e.
++  // they have done all their work up to now(). False on timeout. A thread
++  // woken through its condition variable counts as waiting until it runs, so
++  // such a wakeup must not bring a due deadline.
++  bool wait_until_idle(size_t num_threads,
++                       std::chrono::milliseconds timeout =
++                           std::chrono::seconds(10)) {
++    std::unique_lock<std::mutex> lock(mutex);
++    return waiters_changed.wait_for(lock, timeout, [this, num_threads] {
++      return waiters.size() == num_threads &&
++          std::all_of(waiters.begin(), waiters.end(),
++                      [this](const Waiter *w) { return w->deadline > now_; });
++    });
++  }
++
++ private:
++  struct Waiter {
++    std::mutex *mutex;
++    std::condition_variable *cv;
++    clock::time_point deadline;
++  };
++
++  mutable std::mutex mutex;
++  clock::time_point now_{std::chrono::hours(1)};
++  std::vector<const Waiter *> waiters;
++  std::condition_variable waiters_changed;
++};
++
+ class CLIWrapperImp;
+ 
+ class CLIWrapper {

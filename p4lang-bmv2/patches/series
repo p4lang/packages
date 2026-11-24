@@ -1,3 +1,4 @@
 0001-install-libraries-to-gnuinstalldirs-libdir.patch
 0005-publish-packet-trace-files-atomically.patch
 0006-drop-timed-register-protection-tests.patch
+0007-drive-ageing-and-periodic-tests-with-a-manual-clock.patch
