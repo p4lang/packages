@@ -1,2 +1,1 @@
-0001-drop-boost-system-check.patch
-0002-gtest-include-cstdint.patch
+0001-build-test-rpc-target-only-with-internal-rpc.patch
