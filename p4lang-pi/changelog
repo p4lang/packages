@@ -1,3 +1,9 @@
+p4lang-pi (0.1.6-3) unstable; urgency=medium
+
+  * Build test_rpc_target only with the internal RPC target
+
+ -- Bryan Richter <b@chreekat.net>  Wed, 25 Nov 2026 08:29:05 +0200
+
 p4lang-pi (0.1.6-2) unstable; urgency=medium
 
   * Drop the patches 0.1.6 no longer needs
